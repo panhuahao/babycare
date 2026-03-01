@@ -16,7 +16,7 @@ import { computePregnancy, defaultPregnancyInfo, formatGestation, PregnancyInfo 
 import { clearAll, loadState, saveState } from "./storage";
 import { navTo, Route, toHash } from "./routes";
 import { useHashRoute } from "./useHashRoute";
-import { fetchState, pushState } from "./api";
+import { CngoldPriceItem, CngoldPricesResponse, fetchCngoldPrices, fetchState, pushState } from "./api";
 
 function Icon({ name }: { name: "calendar" | "bell" | "home" | "chart" | "grid" | "user" | "chev" }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", xmlns: "http://www.w3.org/2000/svg" };
@@ -119,7 +119,7 @@ function BottomNav({ route }: { route: Route }) {
   const items: { label: string; icon: any; to: Route }[] = [
     { label: "首页", icon: "home", to: { name: "home" } },
     { label: "统计", icon: "chart", to: { name: "stats" } },
-    { label: "记录", icon: "grid", to: { name: "history" } },
+    { label: "小工具", icon: "grid", to: { name: "widgets" } },
     { label: "我的", icon: "user", to: { name: "mine" } }
   ];
 
@@ -140,50 +140,6 @@ function BottomNav({ route }: { route: Route }) {
             </button>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function Sheet({
-  open,
-  onClose,
-  onPick
-}: {
-  open: boolean;
-  onClose: () => void;
-  onPick: (t: MovementType) => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="sheetOverlay" onClick={onClose} role="presentation">
-      <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="sheetHeader">
-          <div className="sheetHeaderTitle">选择一次胎动表现</div>
-          <button className="iconBtn" onClick={onClose} aria-label="关闭">
-            <Icon name="chev" />
-          </button>
-        </div>
-        <div className="sheetActions">
-          <button className="pickBtn pickBtnPrimary" onClick={() => onPick("hiccup")}>
-            <div>
-              <div className="actionTitle">打嗝</div>
-              <div className="actionSub">轻微、规律的小颤动</div>
-            </div>
-          </button>
-          <button className="pickBtn" onClick={() => onPick("hand")}>
-            <div>
-              <div className="actionTitle">伸伸手</div>
-              <div className="actionSub">轻柔的推顶或滑动感</div>
-            </div>
-          </button>
-          <button className="pickBtn" onClick={() => onPick("kick")}>
-            <div>
-              <div className="actionTitle">踢踢脚</div>
-              <div className="actionSub">较明显的踢动或翻滚</div>
-            </div>
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -302,13 +258,155 @@ function DetailSheet({
   );
 }
 
+function DayDrawer({
+  open,
+  tall,
+  dayKey,
+  totalEffective,
+  totalClicks,
+  ok,
+  events,
+  onClose,
+  onToggleTall,
+  onAdd,
+  onOpenHour
+}: {
+  open: boolean;
+  tall: boolean;
+  dayKey: string;
+  totalEffective: number;
+  totalClicks: number;
+  ok: boolean;
+  events: MovementEvent[];
+  onClose: () => void;
+  onToggleTall: () => void;
+  onAdd: (t: MovementType) => void;
+  onOpenHour: (hourStart: number) => void;
+}) {
+  const [addOpen, setAddOpen] = useState(false);
+  const eventsByHour = useMemo(() => {
+    const map = new Map<number, MovementEvent[]>();
+    for (const e of events) {
+      const h = hourStartMs(e.ts);
+      const list = map.get(h) ?? [];
+      list.push(e);
+      map.set(h, list);
+    }
+    for (const [k, list] of map.entries()) {
+      list.sort((a, b) => a.ts - b.ts);
+      map.set(k, list);
+    }
+    return [...map.entries()].sort((a, b) => b[0] - a[0]);
+  }, [events]);
+  if (!open) return null;
+  return (
+    <div className="sheetOverlay" onClick={onClose} role="presentation">
+      <div className={`drawer${tall ? " drawerTall" : ""}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className="drawerHandle" onClick={onToggleTall} role="button" tabIndex={0} />
+        <div className="drawerHeader">
+          <div>
+            <div className="drawerTitle">{dayKey}</div>
+            <div className="drawerSub">
+              总胎动 {totalEffective} 次 · 点击 {totalClicks} 次 · {ok ? "达标" : "未达标"}
+            </div>
+          </div>
+          <button className="iconBtn" onClick={onClose} aria-label="关闭">
+            <Icon name="chev" />
+          </button>
+        </div>
+
+        <div className="drawerBody">
+          {events.length ? (
+            <div className="list">
+              {eventsByHour.map(([h, list]) => (
+                <HourRecordRow
+                  key={h}
+                  rec={{ hourStart: h, rawClicks: list.length, effectiveCount: effectiveCount(list) }}
+                  events={list}
+                  onOpenDetail={() => onOpenHour(h)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="emptyBox">
+              <div className="emptyIcon">📅</div>
+              <div className="emptyTitle">当天暂无记录</div>
+              <div className="emptySub">点击右下角“新增记录”即可录入。</div>
+            </div>
+          )}
+        </div>
+
+        <button type="button" className="fab" onClick={() => setAddOpen(true)} aria-label="新增记录">
+          新增记录
+        </button>
+
+        {addOpen ? (
+          <div className="sheetOverlay" onClick={() => setAddOpen(false)} role="presentation">
+            <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+              <div className="sheetHeader">
+                <div className="sheetHeaderTitle">快速录入</div>
+                <button className="iconBtn" onClick={() => setAddOpen(false)} aria-label="关闭">
+                  <Icon name="chev" />
+                </button>
+              </div>
+              <div className="sheetActions">
+                <button
+                  className="pickBtn pickBtnPrimary"
+                  type="button"
+                  onClick={() => {
+                    onAdd("hiccup");
+                    setAddOpen(false);
+                  }}
+                >
+                  <div>
+                    <div className="actionTitle">打嗝</div>
+                    <div className="actionSub">轻微、规律的小颤动</div>
+                  </div>
+                </button>
+                <button
+                  className="pickBtn"
+                  type="button"
+                  onClick={() => {
+                    onAdd("hand");
+                    setAddOpen(false);
+                  }}
+                >
+                  <div>
+                    <div className="actionTitle">伸伸手</div>
+                    <div className="actionSub">轻柔的推顶或滑动感</div>
+                  </div>
+                </button>
+                <button
+                  className="pickBtn"
+                  type="button"
+                  onClick={() => {
+                    onAdd("kick");
+                    setAddOpen(false);
+                  }}
+                >
+                  <div>
+                    <div className="actionTitle">踢踢脚</div>
+                    <div className="actionSub">较明显的踢动或翻滚</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function HomePage({
   pregnancy,
   pregnancyInfo,
   records,
   eventsByHour,
   currentHourEffective,
-  onOpenPick,
+  currentHourClicks,
+  bubbleSpeed,
+  onQuickAdd,
   onOpenDetail
 }: {
   pregnancy: ReturnType<typeof computePregnancy>;
@@ -316,19 +414,174 @@ function HomePage({
   records: HourRecord[];
   eventsByHour: Map<number, MovementEvent[]>;
   currentHourEffective: number;
-  onOpenPick: () => void;
+  currentHourClicks: number;
+  bubbleSpeed: number;
+  onQuickAdd: (t: MovementType) => void;
   onOpenDetail: (hourStart: number) => void;
 }) {
   const top3 = records.filter((r) => r.effectiveCount > 0).slice(0, 3);
-  const [ringPulse, setRingPulse] = useState(false);
-  const ringTimerRef = useRef<number | null>(null);
+  const arenaRef = useRef<HTMLDivElement | null>(null);
+  const bubbleRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const animRef = useRef<number | null>(null);
+  const seedRef = useRef(20260301);
+  const speedRef = useRef(bubbleSpeed);
+  const speedPrevRef = useRef(bubbleSpeed);
+  const simRef = useRef<{
+    w: number;
+    h: number;
+    lastTs: number;
+    items: Array<{ x: number; y: number; vx: number; vy: number; r: number }>;
+  } | null>(null);
 
-  function handleRingClick() {
-    if (ringTimerRef.current != null) window.clearTimeout(ringTimerRef.current);
-    setRingPulse(true);
-    ringTimerRef.current = window.setTimeout(() => setRingPulse(false), 520);
-    onOpenPick();
+  const bubbles: Array<{ type: MovementType; title: string; sub: string; size: number; accent: number; glow: number }> = [
+    { type: "hiccup", title: "打嗝", sub: "轻微规律", size: 92, accent: 0.1, glow: 0.52 },
+    { type: "hand", title: "伸伸手", sub: "轻柔推顶", size: 84, accent: 0.16, glow: 0.62 },
+    { type: "kick", title: "踢踢脚", sub: "明显翻滚", size: 98, accent: 0.24, glow: 0.78 }
+  ];
+
+  function rand() {
+    seedRef.current = (seedRef.current * 1664525 + 1013904223) >>> 0;
+    return seedRef.current / 0xffffffff;
   }
+
+  useEffect(() => {
+    const prev = speedPrevRef.current;
+    speedPrevRef.current = bubbleSpeed;
+    speedRef.current = bubbleSpeed;
+    const sim = simRef.current;
+    if (sim && Number.isFinite(prev) && prev > 0) {
+      const ratio = bubbleSpeed / prev;
+      if (Number.isFinite(ratio) && ratio > 0) {
+        for (const it of sim.items) {
+          it.vx *= ratio;
+          it.vy *= ratio;
+        }
+      }
+    }
+  }, [bubbleSpeed]);
+
+  useEffect(() => {
+    const el = arenaRef.current;
+    if (!el) return;
+
+    const init = () => {
+      const rect = el.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const items = bubbles.map((b, i) => {
+        const r = b.size / 2;
+        const pad = 6;
+        const x = pad + rand() * Math.max(1, w - pad * 2 - b.size);
+        const y = pad + rand() * Math.max(1, h - pad * 2 - b.size);
+        const base = 0.03 + rand() * 0.02;
+        const ang = rand() * Math.PI * 2;
+        const vx = Math.cos(ang) * base * (1 + i * 0.08);
+        const vy = Math.sin(ang) * base * (1 + i * 0.08);
+        return { x, y, vx, vy, r };
+      });
+      simRef.current = { w, h, lastTs: performance.now(), items };
+    };
+
+    init();
+
+    const tick = (ts: number) => {
+      const sim = simRef.current;
+      if (!sim) return;
+      const dt = Math.min(40, Math.max(8, ts - sim.lastTs));
+      sim.lastTs = ts;
+      const speed = speedRef.current;
+
+      for (let i = 0; i < sim.items.length; i++) {
+        const it = sim.items[i];
+        const jitter = 0.0003 * speed;
+        it.vx += (rand() - 0.5) * jitter * dt;
+        it.vy += (rand() - 0.5) * jitter * dt;
+
+        const maxV = 0.08;
+        it.vx = Math.max(-maxV, Math.min(maxV, it.vx));
+        it.vy = Math.max(-maxV, Math.min(maxV, it.vy));
+
+        it.x += it.vx * dt * speed;
+        it.y += it.vy * dt * speed;
+
+        const minX = 6;
+        const minY = 6;
+        const maxX = Math.max(minX, sim.w - 6 - it.r * 2);
+        const maxY = Math.max(minY, sim.h - 6 - it.r * 2);
+        if (it.x <= minX) {
+          it.x = minX;
+          it.vx = Math.abs(it.vx) * 0.92;
+        } else if (it.x >= maxX) {
+          it.x = maxX;
+          it.vx = -Math.abs(it.vx) * 0.92;
+        }
+        if (it.y <= minY) {
+          it.y = minY;
+          it.vy = Math.abs(it.vy) * 0.92;
+        } else if (it.y >= maxY) {
+          it.y = maxY;
+          it.vy = -Math.abs(it.vy) * 0.92;
+        }
+      }
+
+      for (let i = 0; i < sim.items.length; i++) {
+        for (let j = i + 1; j < sim.items.length; j++) {
+          const a = sim.items[i];
+          const b = sim.items[j];
+          const ax = a.x + a.r;
+          const ay = a.y + a.r;
+          const bx = b.x + b.r;
+          const by = b.y + b.r;
+          const dx = bx - ax;
+          const dy = by - ay;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const minDist = a.r + b.r + 6;
+          if (dist < minDist) {
+            const push = (minDist - dist) / 2;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            a.x -= nx * push;
+            a.y -= ny * push;
+            b.x += nx * push;
+            b.y += ny * push;
+            const kick = 0.0012 * speed;
+            a.vx -= nx * kick;
+            a.vy -= ny * kick;
+            b.vx += nx * kick;
+            b.vy += ny * kick;
+          }
+        }
+      }
+
+      for (let i = 0; i < sim.items.length; i++) {
+        const node = bubbleRefs.current[i];
+        if (!node) continue;
+        const it = sim.items[i];
+        node.style.transform = `translate3d(${it.x}px, ${it.y}px, 0)`;
+      }
+
+      animRef.current = requestAnimationFrame(tick);
+    };
+
+    animRef.current = requestAnimationFrame(tick);
+
+    let ro: ResizeObserver | null = null;
+    const RO = (window as any).ResizeObserver as typeof ResizeObserver | undefined;
+    if (RO) {
+      ro = new RO(() => init());
+      ro.observe(el);
+    } else {
+      const onResize = () => init();
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
+    }
+
+    return () => {
+      if (animRef.current != null) cancelAnimationFrame(animRef.current);
+      animRef.current = null;
+      ro?.disconnect();
+    };
+  }, []);
 
   return (
     <div className="page">
@@ -367,21 +620,54 @@ function HomePage({
         </div>
       </div>
 
-      <div className="ringWrap">
-        <button className={`ring${ringPulse ? " ringPulse" : ""}`} onClick={handleRingClick} aria-label="记录胎动">
-          <div className="ringInner">
-            <div>
-              <div className="ringCount">{currentHourEffective}</div>
-              <div className="ringHint">本小时有效胎动</div>
-              <div className="ringHint">点击记录一次</div>
+          <div className="currentHourCount" aria-label="本小时统计">
+            <div className="countLabel">本小时</div>
+            <div className="countRow">
+              <div className="countMain">
+                <div className="countValue">{currentHourEffective}</div>
+                <div className="countUnit">有效胎动</div>
+              </div>
+              <div className="countSide">
+                <div className="countSideValue">{currentHourClicks}</div>
+                <div className="countSideLabel">点击</div>
+              </div>
             </div>
           </div>
-        </button>
+
+      <div className="floatArenaWrap">
+        <div className="floatArena" ref={arenaRef} aria-label="胎动快速记录">
+          {bubbles.map((b, idx) => (
+            <button
+              key={b.type}
+              ref={(n) => {
+                bubbleRefs.current[idx] = n;
+              }}
+              type="button"
+              className="floatBubble"
+              style={{
+                ["--bubble-size" as any]: `${b.size}px`,
+                ["--bubble-accent" as any]: String(b.accent),
+                ["--bubble-glow" as any]: String(b.glow)
+              }}
+              onClick={() => onQuickAdd(b.type)}
+              aria-label={`记录：${b.title}`}
+            >
+              <div className="floatBubbleGlow" aria-hidden="true" />
+              <div className="floatBubbleInner">
+                <div className="floatBubbleTitle">{b.title}</div>
+                <div className="floatBubbleSub">{b.sub}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="muted" style={{ fontSize: 12, textAlign: "center", marginTop: 10 }}>
+          点击任意气泡即可记录一次胎动
+        </div>
       </div>
 
       <div className="sectionTitle">
         <h2>最近记录（按小时聚合）</h2>
-        <a className="link" href={toHash({ name: "history" })}>
+        <a className="link" href={toHash({ name: "stats" })}>
           查看全部 <strong>›</strong>
         </a>
       </div>
@@ -399,7 +685,7 @@ function HomePage({
           <div className="card">
             <div className="cardInner">
               <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-                暂无记录。点击上方圆环，选择一次胎动表现即可完成记录。
+                暂无记录。点击上方三个按钮即可快速记录。
               </div>
             </div>
           </div>
@@ -409,59 +695,206 @@ function HomePage({
   );
 }
 
-function StatsCalendarPage({ events, records }: { events: MovementEvent[]; records: HourRecord[] }) {
-  const now = Date.now();
-  const hours = groupByHour(events);
-  const last12hTotal = last12HoursEffectiveTotal(events, now);
-  const recent = hours.slice(0, 12).reverse();
-  const max = Math.max(3, ...recent.map((r) => r.effectiveCount));
+function formatDateKey(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
-  const byDay = useMemo(() => {
-    const map = new Map<string, HourRecord[]>();
+function startOfDayMs(ts: number) {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function strengthLabelFromType(t: MovementType) {
+  switch (t) {
+    case "hiccup":
+      return "轻";
+    case "hand":
+      return "中";
+    case "kick":
+      return "强";
+  }
+}
+
+function formatHourOnly(hourStart: number) {
+  const d = new Date(hourStart);
+  const hh = String(d.getHours()).padStart(2, "0");
+  return `${hh}:00`;
+}
+
+function StatsCalendarPage({
+  events,
+  records,
+  onOpenHourDetail,
+  onOpenDay
+}: {
+  events: MovementEvent[];
+  records: HourRecord[];
+  onOpenHourDetail: (hourStart: number) => void;
+  onOpenDay: (dayKey: string) => void;
+}) {
+  const now = Date.now();
+  const hourMs = 3_600_000;
+  const currentHourStart = Math.floor(now / hourMs) * hourMs;
+  const last12hTotal = last12HoursEffectiveTotal(events, now);
+  const [expandedHourStart, setExpandedHourStart] = useState<number | null>(null);
+  const [hoursOpen, setHoursOpen] = useState(false);
+  const [calMode, setCalMode] = useState<"week" | "month">("week");
+  const [cursorDay, setCursorDay] = useState(() => startOfDayMs(now));
+
+  const recordsByDay = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        totalEffective: number;
+        totalClicks: number;
+      }
+    >();
     for (const r of records) {
-      if (r.effectiveCount <= 0) continue;
-      const d = new Date(r.hourStart);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      const list = map.get(key) ?? [];
-      list.push(r);
-      map.set(key, list);
+      if (r.rawClicks <= 0) continue;
+      const key = formatDateKey(new Date(r.hourStart));
+      const prev = map.get(key) ?? { totalEffective: 0, totalClicks: 0 };
+      map.set(key, { totalEffective: prev.totalEffective + r.effectiveCount, totalClicks: prev.totalClicks + r.rawClicks });
     }
-    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+    return map;
   }, [records]);
+
+  const eventsByHour = useMemo(() => {
+    const map = new Map<number, MovementEvent[]>();
+    for (const e of events) {
+      const h = hourStartMs(e.ts);
+      const list = map.get(h) ?? [];
+      list.push(e);
+      map.set(h, list);
+    }
+    for (const [k, list] of map.entries()) {
+      list.sort((a, b) => a.ts - b.ts);
+      map.set(k, list);
+    }
+    return map;
+  }, [events]);
+
+  const last12Hours = useMemo(() => {
+    const arr: number[] = [];
+    for (let i = 11; i >= 0; i--) arr.push(currentHourStart - i * hourMs);
+    return arr;
+  }, [currentHourStart]);
+
+  const emptyState = !events.length;
+
+  const weekDays = useMemo(() => {
+    const d = new Date(cursorDay);
+    const day = (d.getDay() + 6) % 7;
+    const start = cursorDay - day * 86_400_000;
+    return Array.from({ length: 7 }, (_, i) => start + i * 86_400_000);
+  }, [cursorDay]);
+
+  const monthCells = useMemo(() => {
+    const d = new Date(cursorDay);
+    d.setDate(1);
+    const monthStart = d.getTime();
+    const startDay = (d.getDay() + 6) % 7;
+    const gridStart = monthStart - startDay * 86_400_000;
+    return Array.from({ length: 42 }, (_, i) => gridStart + i * 86_400_000);
+  }, [cursorDay]);
+
+  function goPrev() {
+    if (calMode === "week") {
+      setCursorDay((v) => v - 7 * 86_400_000);
+      return;
+    }
+    setCursorDay((v) => {
+      const d = new Date(v);
+      d.setDate(1);
+      d.setMonth(d.getMonth() - 1);
+      return d.getTime();
+    });
+  }
+
+  function goNext() {
+    if (calMode === "week") {
+      setCursorDay((v) => v + 7 * 86_400_000);
+      return;
+    }
+    setCursorDay((v) => {
+      const d = new Date(v);
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      return d.getTime();
+    });
+  }
 
   return (
     <div className="page">
       <div className="card">
         <div className="cardInner">
-          <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
-            <div>
-              <div className="recordTitle">12小时有效胎动</div>
-              <div className="recordSub">仅用于趋势观察，数值受孕周与时段影响</div>
-            </div>
-            <div className="pill">
-              <strong>{last12hTotal}</strong>
-              <span className="muted">次</span>
-            </div>
-          </div>
-          <div style={{ marginTop: 14, display: "grid", gap: 10 }}>
-            {recent.length ? (
-              recent.map((r) => (
-                <div key={r.hourStart} style={{ display: "grid", gap: 6 }}>
-                  <div className="recordRow" style={{ alignItems: "baseline" }}>
-                    <div className="recordSub">{formatHourLabel(r.hourStart)}</div>
-                    <div className="recordSub">有效 {r.effectiveCount} · 点击 {r.rawClicks}</div>
-                  </div>
-                  <div className="progressBar" aria-label="小时胎动">
-                    <div className="progressFill" style={{ width: `${Math.round((r.effectiveCount / max) * 100)}%` }} />
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-                暂无统计数据。先在首页记录胎动，再回来查看趋势。
+          <button
+            type="button"
+            className={`statsStickyHeader statsStickyBtn ${hoursOpen ? "statsStickyBtnOpen" : ""}`}
+            onClick={() => setHoursOpen((v) => !v)}
+            aria-expanded={hoursOpen}
+          >
+            <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div className="recordTitle">12小时有效胎动</div>
+                <div className="recordSub">仅用于趋势观察，数值受孕周与时段影响</div>
               </div>
-            )}
-          </div>
+              <div className="pill">
+                <strong>{last12hTotal}</strong>
+                <span className="muted">次</span>
+              </div>
+            </div>
+          </button>
+
+          {emptyState ? (
+            <div className="emptyBox">
+              <div className="emptyIcon">📝</div>
+              <div className="emptyTitle">还没有记录</div>
+              <div className="emptySub">先在首页录入一条胎动记录，再回来查看统计与日历。</div>
+            </div>
+          ) : hoursOpen ? (
+            <div className="hourAccordion" aria-label="12小时列表">
+              {last12Hours.map((h) => {
+                const list = eventsByHour.get(h) ?? [];
+                const effective = list.length ? effectiveCount(list) : null;
+                const open = expandedHourStart === h;
+                return (
+                  <div key={h} className={`hourItem ${open ? "hourItemOpen" : ""}`}>
+                    <button
+                      type="button"
+                      className="hourRow"
+                      onClick={() => setExpandedHourStart(open ? null : h)}
+                      aria-expanded={open}
+                    >
+                      <div className="hourLeft">{formatHourOnly(h)}</div>
+                      <div className={`hourRight ${effective == null ? "hourRightEmpty" : ""}`}>
+                        {effective == null ? "--" : effective}
+                      </div>
+                    </button>
+                    <div className="hourPanel">
+                      <div className="hourPanelInner">
+                        {list.length ? (
+                          <HourRecordRow
+                            rec={{ hourStart: h, rawClicks: list.length, effectiveCount: effectiveCount(list) }}
+                            events={list}
+                            onOpenDetail={() => onOpenHourDetail(h)}
+                          />
+                        ) : (
+                          <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
+                            本小时暂无记录。
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
           <div className="hint" style={{ marginTop: 12 }}>
             规则：5分钟内多次点击按1次有效胎动计；每小时有效胎动 ≥3 次通常视为正常。
           </div>
@@ -472,92 +905,76 @@ function StatsCalendarPage({ events, records }: { events: MovementEvent[]; recor
 
       <div className="card">
         <div className="cardInner">
-          <div className="recordTitle">日历</div>
-          <div className="recordSub">按日期查看有记录的小时</div>
-        </div>
-      </div>
-      <div style={{ height: 12 }} />
-
-      <div className="stack">
-        {byDay.length ? (
-          byDay.map(([day, list]) => (
-            <div key={day} className="card">
-              <div className="cardInner">
-                <div className="recordRow">
-                  <div className="recordTitle">{day}</div>
-                  <div className="pill">
-                    <strong>{list.reduce((a, b) => a + b.effectiveCount, 0)}</strong>
-                    <span className="muted">次</span>
-                  </div>
-                </div>
-                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                  {list
-                    .sort((a, b) => b.hourStart - a.hourStart)
-                    .slice(0, 6)
-                    .map((r) => (
-                      <div key={r.hourStart} className="recordRow">
-                        <div className="recordSub">{formatHourLabel(r.hourStart)}</div>
-                        <Badge status={statusForHour(r.effectiveCount)} />
-                      </div>
-                    ))}
-                </div>
-              </div>
+          <div className="recordRow">
+            <div>
+              <div className="recordTitle">日历</div>
+              <div className="recordSub">周/月视图查看达标情况与当天明细</div>
             </div>
-          ))
-        ) : (
-          <div className="card">
-            <div className="cardInner">
-              <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-                暂无日历数据。
-              </div>
+            <div className="segTabs" role="tablist" aria-label="日历视图">
+              <button
+                type="button"
+                className={`segTab ${calMode === "week" ? "segTabActive" : ""}`}
+                onClick={() => {
+                  setCalMode("week");
+                  setCursorDay(startOfDayMs(Date.now()));
+                }}
+              >
+                周
+              </button>
+              <button
+                type="button"
+                className={`segTab ${calMode === "month" ? "segTabActive" : ""}`}
+                onClick={() => {
+                  setCalMode("month");
+                  setCursorDay(startOfDayMs(Date.now()));
+                }}
+              >
+                月
+              </button>
             </div>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
-function HistoryPage({
-  records,
-  eventsByHour,
-  onOpenDetail
-}: {
-  records: HourRecord[];
-  eventsByHour: Map<number, MovementEvent[]>;
-  onOpenDetail: (hourStart: number) => void;
-}) {
-  const list = records.filter((r) => r.effectiveCount > 0);
-  return (
-    <div className="page">
-      <div className="card">
-        <div className="cardInner">
-          <div className="recordTitle">全部历史（按小时）</div>
-          <div className="recordSub">包含每次点击的具体时间与表现</div>
-        </div>
-      </div>
-      <div style={{ height: 12 }} />
-      <div className="list">
-        {list.length ? (
-          list.map((r) => (
-            <HourRecordRow
-              key={r.hourStart}
-              rec={r}
-              events={eventsByHour.get(r.hourStart) ?? []}
-              onOpenDetail={() => onOpenDetail(r.hourStart)}
-            />
-          ))
-        ) : null}
-      </div>
-      {!list.length ? (
-        <div style={{ marginTop: 12 }} className="card">
-          <div className="cardInner">
-            <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-              暂无历史记录。
-            </div>
+          <div className="calNav">
+            <button type="button" className="calNavBtn" onClick={goPrev}>
+              上一页
+            </button>
+            <div className="calNavTitle">{formatDateKey(new Date(cursorDay))}</div>
+            <button type="button" className="calNavBtn" onClick={goNext}>
+              下一页
+            </button>
+          </div>
+
+          <div className="calWeekdays" aria-hidden="true">
+            {["一", "二", "三", "四", "五", "六", "日"].map((w) => (
+              <div key={w} className="calWeekday">
+                {w}
+              </div>
+            ))}
+          </div>
+
+          <div className={`calGrid ${calMode === "month" ? "calGridMonth" : "calGridWeek"}`}>
+            {(calMode === "month" ? monthCells : weekDays).map((dayMs) => {
+              const dayKey = formatDateKey(new Date(dayMs));
+              const sum = recordsByDay.get(dayKey);
+              const hasData = !!sum && sum.totalClicks > 0;
+              const ok = hasData && sum!.totalEffective >= 12;
+              const isToday = dayKey === formatDateKey(new Date());
+              return (
+                <button
+                  key={dayKey}
+                  type="button"
+                  className={`calCell ${hasData ? (ok ? "calCellOk" : "calCellBad") : "calCellEmpty"} ${
+                    isToday ? "calCellToday" : ""
+                  }`}
+                  onClick={() => onOpenDay(dayKey)}
+                >
+                  <div className="calCellDay">{Number(dayKey.slice(-2))}</div>
+                </button>
+              );
+            })}
           </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -568,13 +985,21 @@ function MinePage({
   onUpdatePregnancyInfo,
   onRestore,
   onGenerateTestData,
+  bubbleSpeed,
+  onBubbleSpeedChange,
+  themeMode,
+  onThemeModeChange,
   onClear
 }: {
   pregnancyInfo: PregnancyInfo;
   events: MovementEvent[];
   onUpdatePregnancyInfo: (next: PregnancyInfo) => void;
-  onRestore: (payload: { pregnancyInfo: PregnancyInfo; events: MovementEvent[] }) => void;
+  onRestore: (payload: { pregnancyInfo: PregnancyInfo; events: MovementEvent[]; bubbleSpeed?: number; themeMode?: "dark" | "light" }) => void;
   onGenerateTestData: () => void;
+  bubbleSpeed: number;
+  onBubbleSpeedChange: (v: number) => void;
+  themeMode: "dark" | "light";
+  onThemeModeChange: (v: "dark" | "light") => void;
   onClear: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -585,7 +1010,9 @@ function MinePage({
       version: 1,
       exportedAt: new Date().toISOString(),
       pregnancyInfo,
-      events
+      events,
+      bubbleSpeed,
+      themeMode
     };
     const text = JSON.stringify(payload, null, 2);
     const blob = new Blob([text], { type: "application/json;charset=utf-8" });
@@ -610,6 +1037,8 @@ function MinePage({
     const parsed = JSON.parse(text) as any;
     const pi = parsed?.pregnancyInfo;
     const evs = parsed?.events;
+    const bs = parsed?.bubbleSpeed;
+    const tm = parsed?.themeMode;
     if (!parsed || typeof parsed !== "object" || parsed.version !== 1) {
       throw new Error("备份格式不正确");
     }
@@ -622,7 +1051,16 @@ function MinePage({
     const normalized: MovementEvent[] = evs
       .filter((e: any) => typeof e?.id === "string" && typeof e?.type === "string" && typeof e?.ts === "number")
       .map((e: any) => ({ id: e.id, type: e.type, ts: e.ts }));
-    onRestore({ pregnancyInfo: { lmpDate: pi.lmpDate, babyName: typeof pi.babyName === "string" ? pi.babyName : "" }, events: normalized });
+    const nextBubbleSpeed = typeof bs === "number" && Number.isFinite(bs) ? Math.min(1, Math.max(0.2, bs)) : undefined;
+    const nextThemeMode = tm === "light" || tm === "dark" ? tm : undefined;
+    if (nextBubbleSpeed != null) onBubbleSpeedChange(nextBubbleSpeed);
+    if (nextThemeMode) onThemeModeChange(nextThemeMode);
+    onRestore({
+      pregnancyInfo: { lmpDate: pi.lmpDate, babyName: typeof pi.babyName === "string" ? pi.babyName : "" },
+      events: normalized,
+      bubbleSpeed: nextBubbleSpeed,
+      themeMode: nextThemeMode
+    });
   }
 
   return (
@@ -659,8 +1097,41 @@ function MinePage({
               <div className="hint">将同步保存到服务端，可用于个性化展示。</div>
             </div>
             <details className="details">
-              <summary className="detailsSummary">高级设置</summary>
+              <summary className="detailsSummary">系统设置</summary>
               <div className="detailsBody">
+                <div className="formRow">
+                  <div className="label">配色模式</div>
+                  <div className="segTabs" role="tablist" aria-label="配色模式">
+                    <button
+                      type="button"
+                      className={`segTab ${themeMode === "dark" ? "segTabActive" : ""}`}
+                      onClick={() => onThemeModeChange("dark")}
+                    >
+                      夜间
+                    </button>
+                    <button
+                      type="button"
+                      className={`segTab ${themeMode === "light" ? "segTabActive" : ""}`}
+                      onClick={() => onThemeModeChange("light")}
+                    >
+                      日间
+                    </button>
+                  </div>
+                  <div className="hint">日间模式为白色/菱花白背景，更适合白天使用。</div>
+                </div>
+                <div className="formRow">
+                  <div className="label">首页气泡速度</div>
+                  <input
+                    className="input"
+                    type="range"
+                    min={0.2}
+                    max={1}
+                    step={0.05}
+                    value={bubbleSpeed}
+                    onChange={(e) => onBubbleSpeedChange(Number(e.target.value))}
+                  />
+                  <div className="hint">越靠左越慢，更适合单手点击。</div>
+                </div>
                 <div className="formRow">
                   <div className="label">数据备份与还原</div>
                   <button className="actionBtn actionBtnPrimary" onClick={exportBackup} type="button">
@@ -732,6 +1203,160 @@ function MinePage({
   );
 }
 
+function WidgetsPage() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<CngoldPricesResponse | null>(null);
+
+  const fmt = (n: number | null | undefined, digits?: number | null) => {
+    if (n == null || !Number.isFinite(n)) return "-";
+    const d = typeof digits === "number" && Number.isFinite(digits) ? digits : 2;
+    return d <= 0 ? String(Math.round(n)) : n.toFixed(d);
+  };
+
+  const fmtPercent = (n: number | null | undefined, digits?: number | null) => {
+    if (n == null || !Number.isFinite(n)) return "-";
+    const d = typeof digits === "number" && Number.isFinite(digits) ? Math.min(4, Math.max(0, digits)) : 2;
+    return `${n.toFixed(d)}%`;
+  };
+
+  const fmtTime = (ts: number | null | undefined) => {
+    if (!ts) return "-";
+    try {
+      return new Date(ts).toLocaleString();
+    } catch {
+      return "-";
+    }
+  };
+
+  const [open, setOpen] = useState(false);
+
+  async function load(force: boolean) {
+    setLoading(true);
+    setError(null);
+    const ac = new AbortController();
+    try {
+      const res = await fetchCngoldPrices({ force, signal: ac.signal });
+      setData(res);
+    } catch (err: any) {
+      setError(err?.message ?? "获取失败");
+    } finally {
+      setLoading(false);
+      ac.abort();
+    }
+  }
+
+  useEffect(() => {
+    if (open && !data && !loading) {
+      void load(false);
+    }
+  }, [open]);
+
+  return (
+    <div className="page">
+      <div className="card">
+        <div className="cardInner">
+          <div className="recordTitle">小工具</div>
+          <div className="recordSub">一些方便的小功能</div>
+        </div>
+      </div>
+      <div style={{ height: 12 }} />
+      <div className="card">
+        <div className="cardInner">
+          <div className="stack">
+            <button 
+              className="detailsSummary" 
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+              onClick={() => setOpen(!open)}
+            >
+              <div style={{ textAlign: 'left' }}>
+                <div className="recordTitle">今日金价</div>
+                <div className="recordSub">现货贵金属与金店价格（仅供参考）</div>
+              </div>
+              <div style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
+                <Icon name="chev" />
+              </div>
+            </button>
+
+            {open && (
+              <div className="stack" style={{ marginTop: 12 }}>
+                <button className="actionBtn actionBtnPrimary" type="button" onClick={() => void load(true)} disabled={loading}>
+                  <div>
+                    <div className="actionTitle">{loading ? "获取中…" : "获取最新价格"}</div>
+                    <div className="actionSub">金价 / 金店金价 / 金条 / 回收价格</div>
+                  </div>
+                </button>
+
+                {error ? <div className="errorText">{error}</div> : null}
+
+                {data ? (
+                  <div className="stack">
+                    <div className="recordSub">
+                      数据来源：{data.source}
+                      {data.updatedAt ? ` · 更新时间：${new Date(data.updatedAt).toLocaleString()}` : ""}
+                    </div>
+
+                    {(["shops", "bars", "recycle"] as const).map((k) => {
+                      const sec = data.sections[k];
+                      const items = sec.items ?? [];
+                      const limit = k === "bars" ? 3 : 8;
+                      const rows = items.slice(0, limit);
+
+                      const Table = ({ rows }: { rows: CngoldPriceItem[] }) => (
+                        <div className="priceTableWrap">
+                          <table className="priceTable">
+                            <thead>
+                              <tr>
+                                <th>名称</th>
+                                <th>最新价</th>
+                                <th>昨收价</th>
+                                <th>更新时间</th>
+                                <th>单位</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map((it) => {
+                                let label = it.label;
+                                if (k === "bars") {
+                                  if (label.includes("建行")) label = "建设银行";
+                                  else if (label.includes("中行")) label = "中国银行";
+                                  else if (label.includes("工行")) label = "工商银行";
+                                }
+                                return (
+                                  <tr key={it.code}>
+                                    <td className="priceName">{label}</td>
+                                    <td className="priceNum">{fmt(it.price, it.digits)}</td>
+                                    <td className="priceNum">{fmt(it.prevClose, it.digits)}</td>
+                                    <td className="priceTime">{fmtTime(it.updatedAt)}</td>
+                                    <td className="priceUnit">{it.unit}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+
+                      return (
+                        <div key={k} className="stack">
+                          <div className="recordTitle">{sec.title}</div>
+                          <Table rows={rows} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                <div className="recordSub">提示：以上数据仅供参考，请以实际成交/门店为准。</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const route = useHashRoute();
   const fallbackPreg = useMemo(() => defaultPregnancyInfo(new Date()), []);
@@ -739,9 +1364,16 @@ export function App() {
   const [events, setEvents] = useState<MovementEvent[]>(() => initialState.events);
   const [pregnancyInfo, setPregnancyInfo] = useState<PregnancyInfo>(() => initialState.pregnancyInfo);
   const [updatedAt, setUpdatedAt] = useState<number>(() => initialState.updatedAt);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [detailHour, setDetailHour] = useState<number | null>(null);
+  const [dayKey, setDayKey] = useState<string | null>(null);
+  const [dayTall, setDayTall] = useState(false);
   const suppressSaveRef = useRef(true);
+  const [bubbleSpeed, setBubbleSpeed] = useState<number>(() => initialState.bubbleSpeed);
+  const [themeMode, setThemeMode] = useState<"dark" | "light">(() => initialState.themeMode);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+  }, [themeMode]);
 
   const records = useMemo(() => groupByHour(events), [events]);
   const eventsByHour = useMemo(() => {
@@ -767,6 +1399,12 @@ export function App() {
     return effectiveCount(currentHourEvents);
   }, [events]);
 
+  const currentHourClicks = useMemo(() => {
+    const now = Date.now();
+    const start = Math.floor(now / 3_600_000) * 3_600_000;
+    return events.filter((e) => e.ts >= start && e.ts <= now).length;
+  }, [events]);
+
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
@@ -783,11 +1421,18 @@ export function App() {
             remote?.pregnancyInfo && typeof (remote as any).pregnancyInfo?.lmpDate === "string" && (remote as any).pregnancyInfo.lmpDate
               ? remote.pregnancyInfo
               : fallbackPreg;
+          const remoteBubble =
+            typeof (remote as any)?.bubbleSpeed === "number" && Number.isFinite((remote as any).bubbleSpeed)
+              ? Math.min(1, Math.max(0.2, (remote as any).bubbleSpeed))
+              : initialState.bubbleSpeed;
+          const remoteTheme = (remote as any)?.themeMode === "light" || (remote as any)?.themeMode === "dark" ? remote.themeMode : initialState.themeMode;
           setEvents(remoteEvents);
           setPregnancyInfo(remotePreg);
+          setBubbleSpeed(remoteBubble);
+          setThemeMode(remoteTheme);
           setUpdatedAt(remote.updatedAt);
         } else if (updatedAt > (remote?.updatedAt ?? 0)) {
-          await pushState({ pregnancyInfo, events, updatedAt }, ac.signal);
+          await pushState({ pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt }, ac.signal);
         }
       } catch {}
       suppressSaveRef.current = false;
@@ -796,25 +1441,35 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (suppressSaveRef.current) return;
+    if (suppressSaveRef.current) {
+      saveState({ pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt });
+      return;
+    }
     const nextUpdatedAt = Date.now();
     setUpdatedAt(nextUpdatedAt);
-    saveState({ pregnancyInfo, events, updatedAt: nextUpdatedAt });
+    saveState({ pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt: nextUpdatedAt });
     const ac = new AbortController();
     const t = window.setTimeout(() => {
-      pushState({ pregnancyInfo, events, updatedAt: nextUpdatedAt }, ac.signal).catch(() => {});
+      pushState({ pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt: nextUpdatedAt }, ac.signal).catch(() => {});
     }, 800);
     return () => {
       window.clearTimeout(t);
       ac.abort();
     };
-  }, [events, pregnancyInfo]);
+  }, [events, pregnancyInfo, bubbleSpeed, themeMode]);
 
   function addMovement(type: MovementType) {
     const next: MovementEvent = { id: newId(), type, ts: Date.now() };
     const merged = [next, ...events].slice(0, 2000);
     setEvents(merged);
   }
+
+  function addMovementAt(type: MovementType, ts: number) {
+    const next: MovementEvent = { id: newId(), type, ts };
+    const merged = [next, ...events].slice(0, 2000);
+    setEvents(merged);
+  }
+
 
   function updatePregnancy(next: PregnancyInfo) {
     setPregnancyInfo(next);
@@ -827,23 +1482,32 @@ export function App() {
     suppressSaveRef.current = true;
     setEvents([]);
     setPregnancyInfo(nextPreg);
+    setBubbleSpeed(0.35);
+    setThemeMode("dark");
     setUpdatedAt(nextUpdatedAt);
-    saveState({ pregnancyInfo: nextPreg, events: [], updatedAt: nextUpdatedAt });
-    pushState({ pregnancyInfo: nextPreg, events: [], updatedAt: nextUpdatedAt }).catch(() => {});
+    saveState({ pregnancyInfo: nextPreg, events: [], bubbleSpeed: 0.35, themeMode: "dark", updatedAt: nextUpdatedAt });
+    pushState({ pregnancyInfo: nextPreg, events: [], bubbleSpeed: 0.35, themeMode: "dark", updatedAt: nextUpdatedAt }).catch(() => {});
     suppressSaveRef.current = false;
     navTo({ name: "home" });
   }
 
-  function restore(payload: { pregnancyInfo: PregnancyInfo; events: MovementEvent[] }) {
+  function restore(payload: { pregnancyInfo: PregnancyInfo; events: MovementEvent[]; bubbleSpeed?: number; themeMode?: "dark" | "light" }) {
     const nextEvents = [...payload.events].sort((a, b) => b.ts - a.ts).slice(0, 2000);
     const nextPreg = payload.pregnancyInfo;
+    const nextBubbleSpeed =
+      typeof payload.bubbleSpeed === "number" && Number.isFinite(payload.bubbleSpeed)
+        ? Math.min(1, Math.max(0.2, payload.bubbleSpeed))
+        : bubbleSpeed;
+    const nextThemeMode = payload.themeMode === "light" || payload.themeMode === "dark" ? payload.themeMode : themeMode;
     const nextUpdatedAt = Date.now();
     suppressSaveRef.current = true;
     setEvents(nextEvents);
     setPregnancyInfo(nextPreg);
+    setBubbleSpeed(nextBubbleSpeed);
+    setThemeMode(nextThemeMode);
     setUpdatedAt(nextUpdatedAt);
-    saveState({ pregnancyInfo: nextPreg, events: nextEvents, updatedAt: nextUpdatedAt });
-    pushState({ pregnancyInfo: nextPreg, events: nextEvents, updatedAt: nextUpdatedAt }).catch(() => {});
+    saveState({ pregnancyInfo: nextPreg, events: nextEvents, bubbleSpeed: nextBubbleSpeed, themeMode: nextThemeMode, updatedAt: nextUpdatedAt });
+    pushState({ pregnancyInfo: nextPreg, events: nextEvents, bubbleSpeed: nextBubbleSpeed, themeMode: nextThemeMode, updatedAt: nextUpdatedAt }).catch(() => {});
     suppressSaveRef.current = false;
     navTo({ name: "home" });
   }
@@ -918,9 +1582,9 @@ export function App() {
       ? `${babyPrefix ? `${babyPrefix} · ` : ""}胎动记录`
       : route.name === "stats"
         ? "统计"
-        : route.name === "history"
-          ? "历史"
-          : "我的";
+        : route.name === "widgets"
+          ? "小工具"
+        : "我的";
 
   return (
     <div className="appShell">
@@ -932,13 +1596,23 @@ export function App() {
           records={records}
           eventsByHour={eventsByHour}
           currentHourEffective={currentHourEffective}
-          onOpenPick={() => setSheetOpen(true)}
+          currentHourClicks={currentHourClicks}
+          bubbleSpeed={bubbleSpeed}
+          onQuickAdd={(t) => addMovement(t)}
           onOpenDetail={(h) => setDetailHour(h)}
         />
       ) : route.name === "stats" ? (
-        <StatsCalendarPage events={events} records={records} />
-      ) : route.name === "history" ? (
-        <HistoryPage records={records} eventsByHour={eventsByHour} onOpenDetail={(h) => setDetailHour(h)} />
+        <StatsCalendarPage
+          events={events}
+          records={records}
+          onOpenHourDetail={(h) => setDetailHour(h)}
+          onOpenDay={(k) => {
+            setDayKey(k);
+            setDayTall(false);
+          }}
+        />
+      ) : route.name === "widgets" ? (
+        <WidgetsPage />
       ) : (
         <MinePage
           pregnancyInfo={pregnancyInfo}
@@ -946,24 +1620,51 @@ export function App() {
           onUpdatePregnancyInfo={updatePregnancy}
           onRestore={restore}
           onGenerateTestData={generateTestData}
+          bubbleSpeed={bubbleSpeed}
+          onBubbleSpeedChange={setBubbleSpeed}
+          themeMode={themeMode}
+          onThemeModeChange={setThemeMode}
           onClear={clear}
         />
       )}
       <BottomNav route={route} />
-      <Sheet
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onPick={(t) => {
-          addMovement(t);
-          setSheetOpen(false);
-        }}
-      />
       <DetailSheet
         open={detailHour != null}
         title={detailHour != null ? formatHourLabel(detailHour) : ""}
         events={detailHour != null ? eventsByHour.get(detailHour) ?? [] : []}
         onClose={() => setDetailHour(null)}
       />
+      {dayKey ? (
+        <DayDrawer
+          open={!!dayKey}
+          tall={dayTall}
+          dayKey={dayKey}
+          totalEffective={records
+            .filter((r) => formatDateKey(new Date(r.hourStart)) === dayKey)
+            .reduce((acc, r) => acc + r.effectiveCount, 0)}
+          totalClicks={events.filter((e) => formatDateKey(new Date(e.ts)) === dayKey).length}
+          ok={
+            records
+              .filter((r) => formatDateKey(new Date(r.hourStart)) === dayKey)
+              .reduce((acc, r) => acc + r.effectiveCount, 0) >= 12
+          }
+          events={events
+            .filter((e) => formatDateKey(new Date(e.ts)) === dayKey)
+            .sort((a, b) => a.ts - b.ts)}
+          onClose={() => setDayKey(null)}
+          onToggleTall={() => setDayTall((v) => !v)}
+          onAdd={(t) => {
+            const d = new Date(`${dayKey}T00:00:00`);
+            const dayStart = d.getTime();
+            const msInDay = Date.now() % 86_400_000;
+            addMovementAt(t, dayStart + msInDay);
+          }}
+          onOpenHour={(h) => {
+            setDayKey(null);
+            setDetailHour(h);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

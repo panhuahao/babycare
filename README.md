@@ -50,6 +50,16 @@
 
 3. 访问 http://localhost:5173
 
+### 小工具：今日金价（可选）
+
+“小工具 → 今日金价”默认从金投网（cngold）页面整理数据展示（金价/金店金价/金条/回收），无需配置。
+
+如需改用 Metals.Dev 作为现货贵金属数据源（可选），需要配置环境变量：
+
+```bash
+export METALS_DEV_API_KEY=你的_api_key
+```
+
 ## 🐳 Docker 部署
 
 本项目支持 Docker Compose 一键启动，无需手动配置环境。
@@ -68,6 +78,12 @@ docker compose up -d --build
 
 ```bash
 BBCARE_PORT=8082 docker compose up -d --build
+```
+
+如需改用 Metals.Dev 数据源，可在启动前设置：
+
+```bash
+METALS_DEV_API_KEY=你的_api_key docker compose up -d --build
 ```
 
 ### 数据持久化
