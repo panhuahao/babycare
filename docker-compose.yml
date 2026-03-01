@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${BBCARE_PORT:-8081}:3000"
+    environment:
+      - DB_PATH=/data/bbcare.sqlite
+    volumes:
+      - bbcare_data:/data
+    restart: unless-stopped
+
+volumes:
+  bbcare_data:
