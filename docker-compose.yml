@@ -7,7 +7,14 @@ services:
       - "${BBCARE_PORT:-8081}:3000"
     environment:
       - DB_PATH=/data/bbcare.sqlite
+      - AI_CALLER=${AI_CALLER:-python}
       - METALS_DEV_API_KEY
+      - ZAI_API_KEY
+      - ZAI_MODEL
+      - BIGMODEL_API_KEY
+      - BIGMODEL_MODEL
+    env_file:
+      - ./.env
     volumes:
       - bbcare_data:/data
     restart: unless-stopped

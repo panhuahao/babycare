@@ -1304,3 +1304,69 @@ button {
 .dangerBtn strong {
   color: rgba(255, 90, 122, 0.95);
 }
+
+.special-card {
+  position: relative;
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.special-card:hover {
+  box-shadow: 0 14px 50px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.special-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  transform: skewX(-20deg);
+  animation: shine 4s infinite;
+  pointer-events: none;
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  20% { left: 200%; }
+  100% { left: 200%; }
+}
+
+.special-card .detailsSummary {
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.special-card .input,
+.special-card .segTabs,
+.special-card .actionBtn {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.special-card .segTabActive {
+  background: rgba(var(--pink-rgb), 0.25);
+  border-color: rgba(var(--pink-rgb), 0.6);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(var(--pink-rgb), 0.4), inset 0 0 6px rgba(var(--pink-rgb), 0.2);
+  text-shadow: 0 0 8px rgba(var(--pink-rgb), 0.6);
+  font-weight: 800;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.special-card .segTab:hover:not(.segTabActive) {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.special-card .input:focus {
+  border-color: rgba(var(--pink-rgb), 0.5);
+  box-shadow: 0 0 10px rgba(var(--pink-rgb), 0.25);
+}

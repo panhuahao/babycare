@@ -16,7 +16,7 @@ import { computePregnancy, defaultPregnancyInfo, formatGestation, PregnancyInfo 
 import { clearAll, loadState, saveState } from "./storage";
 import { navTo, Route, toHash } from "./routes";
 import { useHashRoute } from "./useHashRoute";
-import { CngoldPriceItem, CngoldPricesResponse, fetchCngoldPrices, fetchState, pushState } from "./api";
+import { checkFoodByImageUrl, checkFoodByPhotoBinary, uploadFoodImage, CngoldPriceItem, CngoldPricesResponse, fetchCngoldPrices, fetchState, pushState, postClientLog } from "./api";
 
 function Icon({ name }: { name: "calendar" | "bell" | "home" | "chart" | "grid" | "user" | "chev" }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", xmlns: "http://www.w3.org/2000/svg" };
@@ -989,21 +989,75 @@ function MinePage({
   onBubbleSpeedChange,
   themeMode,
   onThemeModeChange,
+  aiVendor,
+  onAiVendorChange,
+  aiModelZhipu,
+  onAiModelZhipuChange,
+  aiModelAliyun,
+  onAiModelAliyunChange,
+  aiSystemPrompt,
+  onAiSystemPromptChange,
+  aiUserPrompt,
+  onAiUserPromptChange,
+  aiThinking,
+  onAiThinkingChange,
+  aiImageBaseUrl,
+  onAiImageBaseUrlChange,
+  aiImageMode,
+  onAiImageModeChange,
+  aiImageTargetKb,
+  onAiImageTargetKbChange,
   onClear
 }: {
   pregnancyInfo: PregnancyInfo;
   events: MovementEvent[];
   onUpdatePregnancyInfo: (next: PregnancyInfo) => void;
-  onRestore: (payload: { pregnancyInfo: PregnancyInfo; events: MovementEvent[]; bubbleSpeed?: number; themeMode?: "dark" | "light" }) => void;
+  onRestore: (payload: {
+    pregnancyInfo: PregnancyInfo;
+    events: MovementEvent[];
+    bubbleSpeed?: number;
+    themeMode?: "dark" | "light";
+    aiVendor?: "zhipu" | "aliyun";
+    aiModelZhipu?: string;
+    aiModelAliyun?: string;
+    aiSystemPrompt?: string;
+    aiUserPrompt?: string;
+    aiThinking?: boolean;
+    aiImageBaseUrl?: string;
+    aiImageMode?: "url" | "inline";
+    aiImageTargetKb?: number;
+  }) => void;
   onGenerateTestData: () => void;
   bubbleSpeed: number;
   onBubbleSpeedChange: (v: number) => void;
   themeMode: "dark" | "light";
   onThemeModeChange: (v: "dark" | "light") => void;
+  aiVendor: "zhipu" | "aliyun";
+  onAiVendorChange: (v: "zhipu" | "aliyun") => void;
+  aiModelZhipu: string;
+  onAiModelZhipuChange: (v: string) => void;
+  aiModelAliyun: string;
+  onAiModelAliyunChange: (v: string) => void;
+  aiSystemPrompt: string;
+  onAiSystemPromptChange: (v: string) => void;
+  aiUserPrompt: string;
+  onAiUserPromptChange: (v: string) => void;
+  aiThinking: boolean;
+  onAiThinkingChange: (v: boolean) => void;
+  aiImageBaseUrl: string;
+  onAiImageBaseUrlChange: (v: string) => void;
+  aiImageMode: "url" | "inline";
+  onAiImageModeChange: (v: "url" | "inline") => void;
+  aiImageTargetKb: number;
+  onAiImageTargetKbChange: (v: number) => void;
   onClear: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const origin = typeof window !== "undefined" && window?.location?.origin ? String(window.location.origin).replace(/\/+$/, "") : "";
+  const defaultSystemPrompt = "你是一个孕妇营养专家";
+  const defaultUserPrompt =
+    "请根据图片判断这是什么食物/菜品，并回答：\n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。";
 
   function exportBackup() {
     const payload = {
@@ -1012,7 +1066,16 @@ function MinePage({
       pregnancyInfo,
       events,
       bubbleSpeed,
-      themeMode
+      themeMode,
+      aiVendor,
+      aiModelZhipu,
+      aiModelAliyun,
+      aiSystemPrompt,
+      aiUserPrompt,
+      aiThinking,
+      aiImageBaseUrl,
+      aiImageMode,
+      aiImageTargetKb
     };
     const text = JSON.stringify(payload, null, 2);
     const blob = new Blob([text], { type: "application/json;charset=utf-8" });
@@ -1039,6 +1102,15 @@ function MinePage({
     const evs = parsed?.events;
     const bs = parsed?.bubbleSpeed;
     const tm = parsed?.themeMode;
+    const av = parsed?.aiVendor;
+    const amz = parsed?.aiModelZhipu;
+    const ama = parsed?.aiModelAliyun;
+    const asp = parsed?.aiSystemPrompt;
+    const aup = parsed?.aiUserPrompt;
+    const at = parsed?.aiThinking;
+    const abu = parsed?.aiImageBaseUrl;
+    const amode = parsed?.aiImageMode;
+    const atk = parsed?.aiImageTargetKb;
     if (!parsed || typeof parsed !== "object" || parsed.version !== 1) {
       throw new Error("备份格式不正确");
     }
@@ -1053,13 +1125,40 @@ function MinePage({
       .map((e: any) => ({ id: e.id, type: e.type, ts: e.ts }));
     const nextBubbleSpeed = typeof bs === "number" && Number.isFinite(bs) ? Math.min(1, Math.max(0.2, bs)) : undefined;
     const nextThemeMode = tm === "light" || tm === "dark" ? tm : undefined;
+    const nextAiVendor = av === "zhipu" || av === "aliyun" ? av : undefined;
+    const nextAiModelZhipu = typeof amz === "string" && amz.trim() ? amz.trim().slice(0, 64) : undefined;
+    const nextAiModelAliyun = typeof ama === "string" && ama.trim() ? ama.trim().slice(0, 64) : undefined;
+    const nextAiSystemPrompt = typeof asp === "string" && asp.trim() ? asp.trim().slice(0, 600) : undefined;
+    const nextAiUserPrompt = typeof aup === "string" && aup.trim() ? aup.trim().slice(0, 4000) : undefined;
+    const nextAiThinking = typeof at === "boolean" ? at : undefined;
+    const nextAiImageBaseUrl = typeof abu === "string" && abu.trim() ? abu.trim().replace(/\/+$/, "").slice(0, 200) : undefined;
+    const nextAiImageMode = amode === "url" || amode === "inline" ? amode : undefined;
+    const nextAiImageTargetKb = typeof atk === "number" && Number.isFinite(atk) ? Math.min(2000, Math.max(150, Math.round(atk))) : undefined;
     if (nextBubbleSpeed != null) onBubbleSpeedChange(nextBubbleSpeed);
     if (nextThemeMode) onThemeModeChange(nextThemeMode);
+    if (nextAiVendor) onAiVendorChange(nextAiVendor);
+    if (nextAiModelZhipu) onAiModelZhipuChange(nextAiModelZhipu);
+    if (nextAiModelAliyun) onAiModelAliyunChange(nextAiModelAliyun);
+    if (nextAiSystemPrompt) onAiSystemPromptChange(nextAiSystemPrompt);
+    if (nextAiUserPrompt) onAiUserPromptChange(nextAiUserPrompt);
+    if (nextAiThinking != null) onAiThinkingChange(nextAiThinking);
+    if (nextAiImageBaseUrl) onAiImageBaseUrlChange(nextAiImageBaseUrl);
+    if (nextAiImageMode) onAiImageModeChange(nextAiImageMode);
+    if (nextAiImageTargetKb != null) onAiImageTargetKbChange(nextAiImageTargetKb);
     onRestore({
       pregnancyInfo: { lmpDate: pi.lmpDate, babyName: typeof pi.babyName === "string" ? pi.babyName : "" },
       events: normalized,
       bubbleSpeed: nextBubbleSpeed,
-      themeMode: nextThemeMode
+      themeMode: nextThemeMode,
+      aiVendor: nextAiVendor,
+      aiModelZhipu: nextAiModelZhipu,
+      aiModelAliyun: nextAiModelAliyun,
+      aiSystemPrompt: nextAiSystemPrompt,
+      aiUserPrompt: nextAiUserPrompt,
+      aiThinking: nextAiThinking,
+      aiImageBaseUrl: nextAiImageBaseUrl,
+      aiImageMode: nextAiImageMode,
+      aiImageTargetKb: nextAiImageTargetKb
     });
   }
 
@@ -1096,6 +1195,187 @@ function MinePage({
               />
               <div className="hint">将同步保存到服务端，可用于个性化展示。</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ height: 12 }} />
+
+      <div className="card special-card">
+        <div className="cardInner">
+          <div className="recordTitle" style={{ marginBottom: 12 }}>AI 设置</div>
+          <div className="stack">
+            <div className="formRow">
+              <div className="label">AI 厂商</div>
+              <div className="segTabs" role="tablist" aria-label="AI 厂商">
+                <button
+                  type="button"
+                  className={`segTab ${aiVendor === "zhipu" ? "segTabActive" : ""}`}
+                  onClick={() => onAiVendorChange("zhipu")}
+                >
+                  智谱
+                </button>
+                <button
+                  type="button"
+                  className={`segTab ${aiVendor === "aliyun" ? "segTabActive" : ""}`}
+                  onClick={() => onAiVendorChange("aliyun")}
+                >
+                  阿里云
+                </button>
+              </div>
+              <div className="hint">用于“拍照问 AI”。可在不同厂商之间切换。</div>
+            </div>
+            <div className="formRow">
+              <div className="label">AI 模型</div>
+              {aiVendor === "zhipu" ? (
+                <div className="segTabs" role="tablist" aria-label="智谱模型">
+                  <button
+                    type="button"
+                    className={`segTab ${aiModelZhipu === "glm-4.6v" ? "segTabActive" : ""}`}
+                    onClick={() => onAiModelZhipuChange("glm-4.6v")}
+                  >
+                    glm-4.6v
+                  </button>
+                  <button
+                    type="button"
+                    className={`segTab ${aiModelZhipu === "glm-4v" ? "segTabActive" : ""}`}
+                    onClick={() => onAiModelZhipuChange("glm-4v")}
+                  >
+                    glm-4v
+                  </button>
+                </div>
+              ) : (
+                <div className="segTabs" role="tablist" aria-label="阿里云百炼模型">
+                  <button
+                    type="button"
+                    className={`segTab ${aiModelAliyun === "qwen3.5-plus" ? "segTabActive" : ""}`}
+                    onClick={() => onAiModelAliyunChange("qwen3.5-plus")}
+                  >
+                    qwen3.5-plus
+                  </button>
+                  <button
+                    type="button"
+                    className={`segTab ${aiModelAliyun === "qwen3.5-flash" ? "segTabActive" : ""}`}
+                    onClick={() => onAiModelAliyunChange("qwen3.5-flash")}
+                  >
+                    qwen3.5-flash
+                  </button>
+                </div>
+              )}
+              <div className="hint">{aiVendor === "zhipu" ? "当前仅展示常用模型。" : "当前仅展示 qwen3.5-plus / qwen3.5-flash。"}</div>
+            </div>
+            <div className="formRow">
+              <div className="label">AI System 提示词</div>
+              <textarea
+                className="input"
+                value={aiSystemPrompt}
+                rows={3}
+                placeholder={defaultSystemPrompt}
+                onChange={(e) => onAiSystemPromptChange(e.target.value)}
+                style={{ resize: "vertical" }}
+              />
+              <div className="hint">作为 system 发送给模型，用于设定角色与风格。</div>
+            </div>
+            <div className="formRow">
+              <div className="label">AI 提问描述</div>
+              <textarea
+                className="input"
+                value={aiUserPrompt}
+                rows={6}
+                placeholder={defaultUserPrompt}
+                onChange={(e) => onAiUserPromptChange(e.target.value)}
+                style={{ resize: "vertical" }}
+              />
+              <button
+                className="actionBtn"
+                type="button"
+                onClick={() => {
+                  onAiSystemPromptChange(defaultSystemPrompt);
+                  onAiUserPromptChange(defaultUserPrompt);
+                }}
+                style={{ background: "rgba(255,255,255,0.08)", border: "none" }}
+              >
+                <div style={{ width: "100%", textAlign: "center" }}>
+                  <div className="actionTitle" style={{ fontSize: 13 }}>
+                    恢复默认提示词
+                  </div>
+                </div>
+              </button>
+              <div className="hint">作为 user 文本发送给模型（和图片一起）。</div>
+            </div>
+            <div className="formRow">
+              <div className="label">AI Thinking</div>
+              <div className="segTabs" role="tablist" aria-label="AI Thinking">
+                <button
+                  type="button"
+                  className={`segTab ${aiThinking ? "segTabActive" : ""}`}
+                  onClick={() => onAiThinkingChange(true)}
+                >
+                  开
+                </button>
+                <button
+                  type="button"
+                  className={`segTab ${!aiThinking ? "segTabActive" : ""}`}
+                  onClick={() => onAiThinkingChange(false)}
+                >
+                  关
+                </button>
+              </div>
+              <div className="hint">{aiVendor === "zhipu" ? "关闭可减少等待时间，但回答可能略不稳定。" : "该开关目前仅对智谱生效。"}</div>
+            </div>
+            <div className="formRow">
+              <div className="label">图片传参方式</div>
+              <div className="segTabs" role="tablist" aria-label="图片传参方式">
+                <button
+                  type="button"
+                  className={`segTab ${aiImageMode === "url" ? "segTabActive" : ""}`}
+                  onClick={() => onAiImageModeChange("url")}
+                >
+                  URL
+                </button>
+                <button
+                  type="button"
+                  className={`segTab ${aiImageMode === "inline" ? "segTabActive" : ""}`}
+                  onClick={() => onAiImageModeChange("inline")}
+                >
+                  Base64
+                </button>
+              </div>
+              <div className="hint">URL 方式更贴近官方文档；仅当大模型可访问该 URL 时才有效。</div>
+            </div>
+            <div className="formRow">
+              <div className="label">图片访问域名</div>
+              <input
+                className="input"
+                type="text"
+                value={aiImageBaseUrl}
+                placeholder={origin || "例如：http://192.168.1.10:8081"}
+                onChange={(e) => onAiImageBaseUrlChange(e.target.value)}
+              />
+              <div className="hint">留空则默认使用当前地址：{origin || "-"}</div>
+            </div>
+            <div className="formRow">
+              <div className="label">图片压缩目标</div>
+              <input
+                className="input"
+                type="range"
+                min={200}
+                max={1200}
+                step={50}
+                value={aiImageTargetKb}
+                onChange={(e) => onAiImageTargetKbChange(Number(e.target.value))}
+              />
+              <div className="hint">当前：{aiImageTargetKb} KB（建议 300–600KB，过低可能影响识别）</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ height: 12 }} />
+
+      <div className="card">
+        <div className="cardInner">
+          <div className="stack">
             <details className="details">
               <summary className="detailsSummary">系统设置</summary>
               <div className="detailsBody">
@@ -1132,6 +1412,7 @@ function MinePage({
                   />
                   <div className="hint">越靠左越慢，更适合单手点击。</div>
                 </div>
+
                 <div className="formRow">
                   <div className="label">数据备份与还原</div>
                   <button className="actionBtn actionBtnPrimary" onClick={exportBackup} type="button">
@@ -1203,10 +1484,38 @@ function MinePage({
   );
 }
 
-function WidgetsPage() {
+function WidgetsPage({
+  aiVendor,
+  aiModelZhipu,
+  aiModelAliyun,
+  aiSystemPrompt,
+  aiUserPrompt,
+  aiThinking,
+  aiImageBaseUrl,
+  aiImageMode,
+  aiImageTargetKb
+}: {
+  aiVendor: "zhipu" | "aliyun";
+  aiModelZhipu: string;
+  aiModelAliyun: string;
+  aiSystemPrompt: string;
+  aiUserPrompt: string;
+  aiThinking: boolean;
+  aiImageBaseUrl: string;
+  aiImageMode: "url" | "inline";
+  aiImageTargetKb: number;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<CngoldPricesResponse | null>(null);
+  const foodFileRef = useRef<HTMLInputElement | null>(null);
+  const [foodBusy, setFoodBusy] = useState(false);
+  const [foodError, setFoodError] = useState<string | null>(null);
+  const [foodPreview, setFoodPreview] = useState<string | null>(null);
+  const [foodAnswer, setFoodAnswer] = useState<{ model: string; content: string } | null>(null);
+  const [foodProgress, setFoodProgress] = useState(0);
+  const [foodElapsedSec, setFoodElapsedSec] = useState(0);
+  const [foodFileSize, setFoodFileSize] = useState<number | null>(null);
 
   const fmt = (n: number | null | undefined, digits?: number | null) => {
     if (n == null || !Number.isFinite(n)) return "-";
@@ -1227,6 +1536,13 @@ function WidgetsPage() {
     } catch {
       return "-";
     }
+  };
+
+  const formatFileSize = (bytes: number | null) => {
+    if (bytes == null) return "";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1024 / 1024).toFixed(2) + " MB";
   };
 
   const [open, setOpen] = useState(false);
@@ -1252,12 +1568,401 @@ function WidgetsPage() {
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!foodBusy) {
+      setFoodProgress(0);
+      setFoodElapsedSec(0);
+      return;
+    }
+    const startedAt = Date.now();
+    setFoodProgress(0.02);
+    const tick = () => {
+      const elapsedMs = Date.now() - startedAt;
+      const elapsed = Math.floor(elapsedMs / 1000);
+      setFoodElapsedSec(elapsed);
+      const p = Math.min(0.96, Math.max(0.02, elapsedMs / 15_000));
+      setFoodProgress(p);
+    };
+    tick();
+    const t = window.setInterval(tick, 200);
+    return () => window.clearInterval(t);
+  }, [foodBusy]);
+
+  const [foodFile, setFoodFile] = useState<File | null>(null);
+  const [foodBlob, setFoodBlob] = useState<Blob | null>(null);
+
+  const compressImage = async (file: File): Promise<{ previewDataUrl: string; blob: Blob }> => {
+    const targetBytes = Math.min(1_500_000, Math.max(180_000, Math.round(aiImageTargetKb * 1024)));
+    const maxBytes = 5_000_000;
+
+    const toJpegBlob = (canvas: HTMLCanvasElement, quality: number) =>
+      new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (b) => {
+            if (!b) {
+              reject(new Error("图片编码失败"));
+              return;
+            }
+            resolve(b);
+          },
+          "image/jpeg",
+          quality
+        );
+      });
+
+    const drawToCanvas = (img: HTMLImageElement, maxDim: number) => {
+      let w = img.width;
+      let h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas context failed");
+      (ctx as any).imageSmoothingEnabled = true;
+      try {
+        (ctx as any).imageSmoothingQuality = "high";
+      } catch {}
+      ctx.drawImage(img, 0, 0, w, h);
+      return canvas;
+    };
+
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = async () => {
+        try {
+          const dims =
+            aiImageTargetKb <= 300 ? [640, 512, 448, 384] : aiImageTargetKb <= 600 ? [768, 640, 512, 448] : [1024, 896, 768, 640];
+
+          let best = null as null | { canvas: HTMLCanvasElement; blob: Blob; q: number };
+          for (const maxDim of dims) {
+            const canvas = drawToCanvas(img, maxDim);
+            let q = 0.75;
+            let blob = await toJpegBlob(canvas, q);
+            while (blob.size > targetBytes && q > 0.35) {
+              q = Math.max(0.35, q - 0.08);
+              blob = await toJpegBlob(canvas, q);
+            }
+            best = { canvas, blob, q };
+            if (blob.size <= targetBytes) break;
+          }
+
+          if (!best) {
+            reject(new Error("图片编码失败"));
+            return;
+          }
+          if (best.blob.size > maxBytes) {
+            reject(new Error("图片过大，请换更小的图片重试"));
+            return;
+          }
+          const previewDataUrl = best.canvas.toDataURL("image/jpeg", Math.min(0.75, best.q));
+          resolve({ previewDataUrl, blob: best.blob });
+        } catch (err: any) {
+          reject(err);
+        } finally {
+          try {
+            URL.revokeObjectURL(url);
+          } catch {}
+        }
+      };
+      img.onerror = () => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {}
+        reject(new Error("图片加载失败"));
+      };
+      img.src = url;
+    });
+  };
+
+  async function onFoodFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFoodError(null);
+    setFoodAnswer(null);
+    setFoodPreview(null);
+    setFoodFile(null);
+    setFoodBlob(null);
+    setFoodFileSize(null);
+
+    if (!file.type.startsWith("image/")) {
+      setFoodError("请选择图片文件");
+      return;
+    }
+
+    setFoodBusy(true);
+    try {
+      const out = await compressImage(file);
+      setFoodPreview(out.previewDataUrl);
+      setFoodBlob(out.blob);
+      setFoodFileSize(out.blob.size);
+      setFoodFile(file); // Keep original file ref if needed, but we use compressed data
+    } catch (err: any) {
+      setFoodError("图片处理失败: " + err.message);
+    } finally {
+      setFoodBusy(false);
+      e.target.value = "";
+    }
+  }
+
+  async function onFoodSubmit() {
+    if (!foodPreview || !foodBlob) return;
+    setFoodBusy(true);
+    setFoodError(null);
+    try {
+      const model = aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu;
+      const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
+      let done = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          void postClientLog({
+            event: "food_submit_attempt",
+            level: "info",
+            data: { vendor: aiVendor, model, mode: aiImageMode, bytes: foodBlob.size, attempt }
+          });
+          if (aiImageMode === "url") {
+            const up = await uploadFoodImage({ blob: foodBlob });
+            let base = String(aiImageBaseUrl ?? "").trim().replace(/\/+$/, "");
+            if (!base) base = window.location.origin.replace(/\/+$/, "");
+            if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
+            const imageUrl = `${base}${up.urlPath}`;
+            const res = await checkFoodByImageUrl({
+              imageUrl,
+              vendor: aiVendor,
+              model,
+              thinking: aiThinking,
+              systemPrompt: aiSystemPrompt,
+              userPrompt: aiUserPrompt
+            });
+            setFoodAnswer(res);
+          } else {
+            const res = await checkFoodByPhotoBinary({
+              blob: foodBlob,
+              vendor: aiVendor,
+              model,
+              thinking: aiThinking,
+              systemPrompt: aiSystemPrompt,
+              userPrompt: aiUserPrompt
+            });
+            setFoodAnswer(res);
+          }
+          void postClientLog({
+            event: "food_submit_ok",
+            level: "info",
+            data: { vendor: aiVendor, model, mode: aiImageMode, bytes: foodBlob.size, attempt }
+          });
+          done = true;
+          break;
+        } catch (err: any) {
+          if (err?.name === "AbortError" && attempt === 0) {
+            void postClientLog({
+              event: "food_submit_abort",
+              level: "warn",
+              data: { vendor: aiVendor, model, mode: aiImageMode, bytes: foodBlob.size, attempt, message: err?.message ?? "" }
+            });
+            await sleep(350);
+            continue;
+          }
+          throw err;
+        }
+      }
+      if (!done) throw new Error("请求失败");
+    } catch (err: any) {
+      const msg = err?.name === "AbortError" ? "请求被中断，请重试（可能是图片仍偏大或网络波动）" : err?.message ?? "AI 分析失败";
+      void postClientLog({
+        event: "food_submit_error",
+        level: err?.name === "AbortError" ? "warn" : "error",
+        data: { vendor: aiVendor, model: aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu, mode: aiImageMode, bytes: foodBlob.size, name: err?.name ?? "", message: err?.message ?? "" }
+      });
+      setFoodError(msg);
+    } finally {
+      setFoodProgress(1);
+      setFoodBusy(false);
+    }
+  }
+
   return (
     <div className="page">
       <div className="card">
         <div className="cardInner">
           <div className="recordTitle">小工具</div>
           <div className="recordSub">一些方便的小功能</div>
+        </div>
+      </div>
+      <div style={{ height: 12 }} />
+      <div className="card">
+        <div className="cardInner">
+          <div className="stack">
+            <div>
+              <div className="recordTitle">孕妇饮食拍照问 AI</div>
+              <div className="recordSub">拍一张食物照片，AI 判断孕期能否食用与每日建议量</div>
+            </div>
+
+            {!foodPreview ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <button
+                  className="actionBtn actionBtnPrimary"
+                  type="button"
+                  onClick={() => {
+                    setFoodError(null);
+                    if (foodFileRef.current) {
+                      foodFileRef.current.removeAttribute("capture");
+                      foodFileRef.current.click();
+                    }
+                  }}
+                  disabled={foodBusy}
+                >
+                  <div style={{ textAlign: "center", width: "100%" }}>
+                    <div className="actionTitle">相册上传</div>
+                  </div>
+                </button>
+                <button
+                  className="actionBtn actionBtnPrimary"
+                  type="button"
+                  onClick={() => {
+                    setFoodError(null);
+                    if (foodFileRef.current) {
+                      foodFileRef.current.setAttribute("capture", "environment");
+                      foodFileRef.current.click();
+                    }
+                  }}
+                  disabled={foodBusy}
+                >
+                  <div style={{ textAlign: "center", width: "100%" }}>
+                    <div className="actionTitle">拍照</div>
+                  </div>
+                </button>
+              </div>
+            ) : (
+              <div className="stack">
+                {foodBusy ? (
+                  <div className="stack">
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, opacity: 0.8 }}>
+                      <div>分析中…</div>
+                      <div>{Math.min(99, Math.round(foodProgress * 100))}% · {Math.min(99, foodElapsedSec)}s{foodFileSize ? ` · ${formatFileSize(foodFileSize)}` : ""}</div>
+                    </div>
+                    <div style={{ height: 10, borderRadius: 999, background: "rgba(255,255,255,0.10)", overflow: "hidden" }}>
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${Math.min(100, Math.round(foodProgress * 100))}%`,
+                          background: "linear-gradient(90deg, var(--pink) 0%, rgba(var(--pink2-rgb), 0.78) 55%, rgba(255, 255, 255, 0.2) 100%)",
+                          transition: "width 0.2s ease"
+                        }}
+                      />
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>预计约 15 秒，偶尔因模型侧拥塞会更久</div>
+                  </div>
+                ) : null}
+                <div 
+                  className="priceTableWrap" 
+                  style={{ 
+                    borderRadius: 18, 
+                    overflow: "hidden", 
+                    maxHeight: foodAnswer ? 120 : 300, 
+                    transition: "max-height 0.3s ease" 
+                  }}
+                >
+                  <img 
+                    src={foodPreview} 
+                    alt="食物照片" 
+                    style={{ 
+                      width: "100%", 
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block" 
+                    }} 
+                  />
+                </div>
+
+                {!foodBusy && foodFileSize ? (
+                   <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", textAlign: "center" }}>
+                     图片已处理 ({formatFileSize(foodFileSize)})
+                   </div>
+                ) : null}
+
+                {!foodAnswer && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
+                    <button
+                      className="actionBtn"
+                      type="button"
+                      style={{ background: "rgba(255,255,255,0.1)", border: "none" }}
+                      onClick={() => {
+                        setFoodPreview(null);
+                        setFoodFile(null);
+                        setFoodBlob(null);
+                        setFoodAnswer(null);
+                        setFoodError(null);
+                      }}
+                      disabled={foodBusy}
+                    >
+                      <div style={{ textAlign: "center", width: "100%" }}>
+                        <div className="actionTitle" style={{ color: "rgba(255,255,255,0.8)" }}>重选</div>
+                      </div>
+                    </button>
+                    <button
+                      className="actionBtn actionBtnPrimary"
+                      type="button"
+                      onClick={onFoodSubmit}
+                      disabled={foodBusy}
+                    >
+                      <div style={{ textAlign: "center", width: "100%" }}>
+                        <div className="actionTitle">{foodBusy ? "分析中…" : "确认并询问 AI"}</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <input
+              ref={foodFileRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={onFoodFileSelect}
+            />
+
+            {foodError ? <div className="errorText">{foodError}</div> : null}
+
+            {foodAnswer ? (
+              <div className="stack">
+                <div className="card" style={{ background: "rgba(255,255,255,0.04)" }}>
+                  <div className="cardInner">
+                    <div className="recordSub" style={{ marginBottom: 8 }}>
+                      模型：{foodAnswer.model}
+                    </div>
+                    <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6, fontSize: 13 }}>{foodAnswer.content}</div>
+                  </div>
+                </div>
+                <button
+                  className="actionBtn"
+                  type="button"
+                  style={{ background: "rgba(255,255,255,0.08)", border: "none", marginTop: 8 }}
+                  onClick={() => {
+                    setFoodPreview(null);
+                    setFoodFile(null);
+                    setFoodBlob(null);
+                    setFoodAnswer(null);
+                    setFoodError(null);
+                  }}
+                >
+                  <div style={{ textAlign: "center", width: "100%" }}>
+                    <div className="actionTitle" style={{ fontSize: 13 }}>再测一次</div>
+                  </div>
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
       <div style={{ height: 12 }} />
@@ -1370,6 +2075,15 @@ export function App() {
   const suppressSaveRef = useRef(true);
   const [bubbleSpeed, setBubbleSpeed] = useState<number>(() => initialState.bubbleSpeed);
   const [themeMode, setThemeMode] = useState<"dark" | "light">(() => initialState.themeMode);
+  const [aiVendor, setAiVendor] = useState<"zhipu" | "aliyun">(() => initialState.aiVendor);
+  const [aiModelZhipu, setAiModelZhipu] = useState<string>(() => initialState.aiModelZhipu);
+  const [aiModelAliyun, setAiModelAliyun] = useState<string>(() => initialState.aiModelAliyun);
+  const [aiSystemPrompt, setAiSystemPrompt] = useState<string>(() => initialState.aiSystemPrompt);
+  const [aiUserPrompt, setAiUserPrompt] = useState<string>(() => initialState.aiUserPrompt);
+  const [aiThinking, setAiThinking] = useState<boolean>(() => initialState.aiThinking);
+  const [aiImageBaseUrl, setAiImageBaseUrl] = useState<string>(() => initialState.aiImageBaseUrl);
+  const [aiImageMode, setAiImageMode] = useState<"url" | "inline">(() => initialState.aiImageMode);
+  const [aiImageTargetKb, setAiImageTargetKb] = useState<number>(() => initialState.aiImageTargetKb);
 
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
@@ -1426,13 +2140,69 @@ export function App() {
               ? Math.min(1, Math.max(0.2, (remote as any).bubbleSpeed))
               : initialState.bubbleSpeed;
           const remoteTheme = (remote as any)?.themeMode === "light" || (remote as any)?.themeMode === "dark" ? remote.themeMode : initialState.themeMode;
+          const remoteAiVendor = (remote as any)?.aiVendor === "zhipu" || (remote as any)?.aiVendor === "aliyun" ? remote.aiVendor : initialState.aiVendor;
+          const remoteAiModelZhipu =
+            typeof (remote as any)?.aiModelZhipu === "string" && remote.aiModelZhipu.trim()
+              ? remote.aiModelZhipu.trim().slice(0, 64)
+              : typeof (remote as any)?.aiModel === "string" && String((remote as any).aiModel).trim()
+                ? String((remote as any).aiModel).trim().slice(0, 64)
+                : initialState.aiModelZhipu;
+          const remoteAiModelAliyun =
+            typeof (remote as any)?.aiModelAliyun === "string" && remote.aiModelAliyun.trim()
+              ? remote.aiModelAliyun.trim().slice(0, 64)
+              : initialState.aiModelAliyun;
+          const remoteAiSystemPrompt =
+            typeof (remote as any)?.aiSystemPrompt === "string" && String((remote as any).aiSystemPrompt).trim()
+              ? String((remote as any).aiSystemPrompt).trim().slice(0, 600)
+              : initialState.aiSystemPrompt;
+          const remoteAiUserPrompt =
+            typeof (remote as any)?.aiUserPrompt === "string" && String((remote as any).aiUserPrompt).trim()
+              ? String((remote as any).aiUserPrompt).trim().slice(0, 4000)
+              : initialState.aiUserPrompt;
+          const remoteAiThinking = typeof (remote as any)?.aiThinking === "boolean" ? remote.aiThinking : initialState.aiThinking;
+          const remoteAiImageBaseUrl =
+            typeof (remote as any)?.aiImageBaseUrl === "string" && remote.aiImageBaseUrl.trim()
+              ? remote.aiImageBaseUrl.trim().replace(/\/+$/, "").slice(0, 200)
+              : initialState.aiImageBaseUrl;
+          const remoteAiImageMode = (remote as any)?.aiImageMode === "url" || (remote as any)?.aiImageMode === "inline" ? remote.aiImageMode : initialState.aiImageMode;
+          const remoteAiImageTargetKb =
+            typeof (remote as any)?.aiImageTargetKb === "number" && Number.isFinite((remote as any).aiImageTargetKb)
+              ? Math.min(2000, Math.max(150, Math.round((remote as any).aiImageTargetKb)))
+              : initialState.aiImageTargetKb;
           setEvents(remoteEvents);
           setPregnancyInfo(remotePreg);
           setBubbleSpeed(remoteBubble);
           setThemeMode(remoteTheme);
+          setAiVendor(remoteAiVendor);
+          setAiModelZhipu(remoteAiModelZhipu);
+          setAiModelAliyun(remoteAiModelAliyun);
+          setAiSystemPrompt(remoteAiSystemPrompt);
+          setAiUserPrompt(remoteAiUserPrompt);
+          setAiThinking(remoteAiThinking);
+          setAiImageBaseUrl(remoteAiImageBaseUrl);
+          setAiImageMode(remoteAiImageMode);
+          setAiImageTargetKb(remoteAiImageTargetKb);
           setUpdatedAt(remote.updatedAt);
         } else if (updatedAt > (remote?.updatedAt ?? 0)) {
-          await pushState({ pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt }, ac.signal);
+          await pushState(
+            {
+              pregnancyInfo,
+              events,
+              bubbleSpeed,
+              themeMode,
+              aiVendor,
+              aiModelZhipu,
+              aiModelAliyun,
+              aiSystemPrompt,
+              aiUserPrompt,
+              aiThinking,
+              aiImageBaseUrl,
+              aiImageMode,
+              aiImageTargetKb,
+              updatedAt
+            },
+            ac.signal
+          );
         }
       } catch {}
       suppressSaveRef.current = false;
@@ -1442,21 +2212,83 @@ export function App() {
 
   useEffect(() => {
     if (suppressSaveRef.current) {
-      saveState({ pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt });
+      saveState({
+        pregnancyInfo,
+        events,
+        bubbleSpeed,
+        themeMode,
+        aiVendor,
+        aiModelZhipu,
+        aiModelAliyun,
+        aiSystemPrompt,
+        aiUserPrompt,
+        aiThinking,
+        aiImageBaseUrl,
+        aiImageMode,
+        aiImageTargetKb,
+        updatedAt
+      });
       return;
     }
     const nextUpdatedAt = Date.now();
     setUpdatedAt(nextUpdatedAt);
-    saveState({ pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt: nextUpdatedAt });
+    saveState({
+      pregnancyInfo,
+      events,
+      bubbleSpeed,
+      themeMode,
+      aiVendor,
+      aiModelZhipu,
+      aiModelAliyun,
+      aiSystemPrompt,
+      aiUserPrompt,
+      aiThinking,
+      aiImageBaseUrl,
+      aiImageMode,
+      aiImageTargetKb,
+      updatedAt: nextUpdatedAt
+    });
     const ac = new AbortController();
     const t = window.setTimeout(() => {
-      pushState({ pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt: nextUpdatedAt }, ac.signal).catch(() => {});
+      pushState(
+        {
+          pregnancyInfo,
+          events,
+          bubbleSpeed,
+          themeMode,
+          aiVendor,
+          aiModelZhipu,
+          aiModelAliyun,
+          aiSystemPrompt,
+          aiUserPrompt,
+          aiThinking,
+          aiImageBaseUrl,
+          aiImageMode,
+          aiImageTargetKb,
+          updatedAt: nextUpdatedAt
+        },
+        ac.signal
+      ).catch(() => {});
     }, 800);
     return () => {
       window.clearTimeout(t);
       ac.abort();
     };
-  }, [events, pregnancyInfo, bubbleSpeed, themeMode]);
+  }, [
+    events,
+    pregnancyInfo,
+    bubbleSpeed,
+    themeMode,
+    aiVendor,
+    aiModelZhipu,
+    aiModelAliyun,
+    aiSystemPrompt,
+    aiUserPrompt,
+    aiThinking,
+    aiImageBaseUrl,
+    aiImageMode,
+    aiImageTargetKb
+  ]);
 
   function addMovement(type: MovementType) {
     const next: MovementEvent = { id: newId(), type, ts: Date.now() };
@@ -1484,14 +2316,71 @@ export function App() {
     setPregnancyInfo(nextPreg);
     setBubbleSpeed(0.35);
     setThemeMode("dark");
+    setAiVendor("zhipu");
+    setAiModelZhipu("glm-4.6v");
+    setAiModelAliyun("qwen3.5-plus");
+    setAiSystemPrompt("你是一个孕妇营养专家");
+    setAiUserPrompt(
+      "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。"
+    );
+    setAiThinking(true);
+    setAiImageBaseUrl(window.location.origin);
+    setAiImageMode("url");
+    setAiImageTargetKb(450);
     setUpdatedAt(nextUpdatedAt);
-    saveState({ pregnancyInfo: nextPreg, events: [], bubbleSpeed: 0.35, themeMode: "dark", updatedAt: nextUpdatedAt });
-    pushState({ pregnancyInfo: nextPreg, events: [], bubbleSpeed: 0.35, themeMode: "dark", updatedAt: nextUpdatedAt }).catch(() => {});
+    saveState({
+      pregnancyInfo: nextPreg,
+      events: [],
+      bubbleSpeed: 0.35,
+      themeMode: "dark",
+      aiVendor: "zhipu",
+      aiModelZhipu: "glm-4.6v",
+      aiModelAliyun: "qwen3.5-plus",
+      aiSystemPrompt: "你是一个孕妇营养专家",
+      aiUserPrompt:
+        "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+      aiThinking: true,
+      aiImageBaseUrl: window.location.origin,
+      aiImageMode: "url",
+      aiImageTargetKb: 450,
+      updatedAt: nextUpdatedAt
+    });
+    pushState({
+      pregnancyInfo: nextPreg,
+      events: [],
+      bubbleSpeed: 0.35,
+      themeMode: "dark",
+      aiVendor: "zhipu",
+      aiModelZhipu: "glm-4.6v",
+      aiModelAliyun: "qwen3.5-plus",
+      aiSystemPrompt: "你是一个孕妇营养专家",
+      aiUserPrompt:
+        "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+      aiThinking: true,
+      aiImageBaseUrl: window.location.origin,
+      aiImageMode: "url",
+      aiImageTargetKb: 450,
+      updatedAt: nextUpdatedAt
+    }).catch(() => {});
     suppressSaveRef.current = false;
     navTo({ name: "home" });
   }
 
-  function restore(payload: { pregnancyInfo: PregnancyInfo; events: MovementEvent[]; bubbleSpeed?: number; themeMode?: "dark" | "light" }) {
+  function restore(payload: {
+    pregnancyInfo: PregnancyInfo;
+    events: MovementEvent[];
+    bubbleSpeed?: number;
+    themeMode?: "dark" | "light";
+    aiVendor?: "zhipu" | "aliyun";
+    aiModelZhipu?: string;
+    aiModelAliyun?: string;
+    aiSystemPrompt?: string;
+    aiUserPrompt?: string;
+    aiThinking?: boolean;
+    aiImageBaseUrl?: string;
+    aiImageMode?: "url" | "inline";
+    aiImageTargetKb?: number;
+  }) {
     const nextEvents = [...payload.events].sort((a, b) => b.ts - a.ts).slice(0, 2000);
     const nextPreg = payload.pregnancyInfo;
     const nextBubbleSpeed =
@@ -1499,15 +2388,71 @@ export function App() {
         ? Math.min(1, Math.max(0.2, payload.bubbleSpeed))
         : bubbleSpeed;
     const nextThemeMode = payload.themeMode === "light" || payload.themeMode === "dark" ? payload.themeMode : themeMode;
+    const nextAiVendor = payload.aiVendor === "zhipu" || payload.aiVendor === "aliyun" ? payload.aiVendor : aiVendor;
+    const nextAiModelZhipu = typeof payload.aiModelZhipu === "string" && payload.aiModelZhipu.trim() ? payload.aiModelZhipu.trim().slice(0, 64) : aiModelZhipu;
+    const nextAiModelAliyun = typeof payload.aiModelAliyun === "string" && payload.aiModelAliyun.trim() ? payload.aiModelAliyun.trim().slice(0, 64) : aiModelAliyun;
+    const nextAiSystemPrompt =
+      typeof payload.aiSystemPrompt === "string" && payload.aiSystemPrompt.trim() ? payload.aiSystemPrompt.trim().slice(0, 600) : aiSystemPrompt;
+    const nextAiUserPrompt =
+      typeof payload.aiUserPrompt === "string" && payload.aiUserPrompt.trim() ? payload.aiUserPrompt.trim().slice(0, 4000) : aiUserPrompt;
+    const nextAiThinking = typeof payload.aiThinking === "boolean" ? payload.aiThinking : aiThinking;
+    const nextAiImageBaseUrl =
+      typeof payload.aiImageBaseUrl === "string" && payload.aiImageBaseUrl.trim()
+        ? payload.aiImageBaseUrl.trim().replace(/\/+$/, "").slice(0, 200)
+        : aiImageBaseUrl;
+    const nextAiImageMode = payload.aiImageMode === "url" || payload.aiImageMode === "inline" ? payload.aiImageMode : aiImageMode;
+    const nextAiImageTargetKb =
+      typeof payload.aiImageTargetKb === "number" && Number.isFinite(payload.aiImageTargetKb)
+        ? Math.min(2000, Math.max(150, Math.round(payload.aiImageTargetKb)))
+        : aiImageTargetKb;
     const nextUpdatedAt = Date.now();
     suppressSaveRef.current = true;
     setEvents(nextEvents);
     setPregnancyInfo(nextPreg);
     setBubbleSpeed(nextBubbleSpeed);
     setThemeMode(nextThemeMode);
+    setAiVendor(nextAiVendor);
+    setAiModelZhipu(nextAiModelZhipu);
+    setAiModelAliyun(nextAiModelAliyun);
+    setAiSystemPrompt(nextAiSystemPrompt);
+    setAiUserPrompt(nextAiUserPrompt);
+    setAiThinking(nextAiThinking);
+    setAiImageBaseUrl(nextAiImageBaseUrl);
+    setAiImageMode(nextAiImageMode);
+    setAiImageTargetKb(nextAiImageTargetKb);
     setUpdatedAt(nextUpdatedAt);
-    saveState({ pregnancyInfo: nextPreg, events: nextEvents, bubbleSpeed: nextBubbleSpeed, themeMode: nextThemeMode, updatedAt: nextUpdatedAt });
-    pushState({ pregnancyInfo: nextPreg, events: nextEvents, bubbleSpeed: nextBubbleSpeed, themeMode: nextThemeMode, updatedAt: nextUpdatedAt }).catch(() => {});
+    saveState({
+      pregnancyInfo: nextPreg,
+      events: nextEvents,
+      bubbleSpeed: nextBubbleSpeed,
+      themeMode: nextThemeMode,
+      aiVendor: nextAiVendor,
+      aiModelZhipu: nextAiModelZhipu,
+      aiModelAliyun: nextAiModelAliyun,
+      aiSystemPrompt: nextAiSystemPrompt,
+      aiUserPrompt: nextAiUserPrompt,
+      aiThinking: nextAiThinking,
+      aiImageBaseUrl: nextAiImageBaseUrl,
+      aiImageMode: nextAiImageMode,
+      aiImageTargetKb: nextAiImageTargetKb,
+      updatedAt: nextUpdatedAt
+    });
+    pushState({
+      pregnancyInfo: nextPreg,
+      events: nextEvents,
+      bubbleSpeed: nextBubbleSpeed,
+      themeMode: nextThemeMode,
+      aiVendor: nextAiVendor,
+      aiModelZhipu: nextAiModelZhipu,
+      aiModelAliyun: nextAiModelAliyun,
+      aiSystemPrompt: nextAiSystemPrompt,
+      aiUserPrompt: nextAiUserPrompt,
+      aiThinking: nextAiThinking,
+      aiImageBaseUrl: nextAiImageBaseUrl,
+      aiImageMode: nextAiImageMode,
+      aiImageTargetKb: nextAiImageTargetKb,
+      updatedAt: nextUpdatedAt
+    }).catch(() => {});
     suppressSaveRef.current = false;
     navTo({ name: "home" });
   }
@@ -1612,7 +2557,17 @@ export function App() {
           }}
         />
       ) : route.name === "widgets" ? (
-        <WidgetsPage />
+        <WidgetsPage
+          aiVendor={aiVendor}
+          aiModelZhipu={aiModelZhipu}
+          aiModelAliyun={aiModelAliyun}
+          aiSystemPrompt={aiSystemPrompt}
+          aiUserPrompt={aiUserPrompt}
+          aiThinking={aiThinking}
+          aiImageBaseUrl={aiImageBaseUrl}
+          aiImageMode={aiImageMode}
+          aiImageTargetKb={aiImageTargetKb}
+        />
       ) : (
         <MinePage
           pregnancyInfo={pregnancyInfo}
@@ -1624,6 +2579,24 @@ export function App() {
           onBubbleSpeedChange={setBubbleSpeed}
           themeMode={themeMode}
           onThemeModeChange={setThemeMode}
+          aiVendor={aiVendor}
+          onAiVendorChange={setAiVendor}
+          aiModelZhipu={aiModelZhipu}
+          onAiModelZhipuChange={(v) => setAiModelZhipu(v.trim().slice(0, 64))}
+          aiModelAliyun={aiModelAliyun}
+          onAiModelAliyunChange={(v) => setAiModelAliyun(v.trim().slice(0, 64))}
+          aiSystemPrompt={aiSystemPrompt}
+          onAiSystemPromptChange={(v) => setAiSystemPrompt(v.replace(/\r\n/g, "\n").slice(0, 600))}
+          aiUserPrompt={aiUserPrompt}
+          onAiUserPromptChange={(v) => setAiUserPrompt(v.replace(/\r\n/g, "\n").slice(0, 4000))}
+          aiThinking={aiThinking}
+          onAiThinkingChange={setAiThinking}
+          aiImageBaseUrl={aiImageBaseUrl}
+          onAiImageBaseUrlChange={(v) => setAiImageBaseUrl(v.trim().replace(/\/+$/, "").slice(0, 200))}
+          aiImageMode={aiImageMode}
+          onAiImageModeChange={setAiImageMode}
+          aiImageTargetKb={aiImageTargetKb}
+          onAiImageTargetKbChange={(v) => setAiImageTargetKb(Math.min(2000, Math.max(150, Math.round(v))))}
           onClear={clear}
         />
       )}

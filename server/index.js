@@ -1,5 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
+import { spawn } from "node:child_process";
 import express from "express";
 import Database from "better-sqlite3";
 
@@ -7,6 +9,16 @@ const PORT = Number(process.env.PORT ?? 3000);
 const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), "bbcare.sqlite");
 const DIST_DIR = process.env.DIST_DIR ?? path.resolve(process.cwd(), "dist");
 const METALS_DEV_API_KEY = String(process.env.METALS_DEV_API_KEY ?? "");
+const ZAI_API_KEY = String(process.env.ZAI_API_KEY ?? process.env.BIGMODEL_API_KEY ?? "").trim();
+const ZAI_MODEL = String(process.env.ZAI_MODEL ?? process.env.BIGMODEL_MODEL ?? "glm-4.6v").trim();
+const DASHSCOPE_API_KEY = String(process.env.DASHSCOPE_API_KEY ?? process.env.BAILIAN_API_KEY ?? "").trim();
+const DASHSCOPE_MODEL = String(process.env.DASHSCOPE_MODEL ?? "qwen3.5-plus").trim();
+const DASHSCOPE_BASE_URL = String(process.env.DASHSCOPE_BASE_URL ?? "https://dashscope.aliyuncs.com/compatible-mode/v1")
+  .trim()
+  .replace(/\/+$/, "");
+const AI_CALLER = String(process.env.AI_CALLER ?? "python").trim().toLowerCase();
+const AI_TIMEOUT_S = Math.min(120, Math.max(5, Number(process.env.AI_TIMEOUT_S ?? 40) || 40));
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(path.dirname(DB_PATH), "uploads");
 const TOZ_GRAMS = 31.1034768;
 const JIJINHAO_HEADERS = {
   "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -15,6 +27,10 @@ const JIJINHAO_HEADERS = {
 
 function ensureDir(p) {
   fs.mkdirSync(path.dirname(p), { recursive: true });
+}
+
+function ensureDirPath(p) {
+  fs.mkdirSync(p, { recursive: true });
 }
 
 function openDb() {
@@ -27,14 +43,91 @@ function openDb() {
       json TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts INTEGER NOT NULL,
+      level TEXT NOT NULL,
+      event TEXT NOT NULL,
+      data TEXT NOT NULL
+    );
   `);
   const row = db.prepare("SELECT id FROM state WHERE id = 1").get();
   if (!row) {
     db.prepare("INSERT INTO state (id, json, updated_at) VALUES (1, ?, 0)").run(
-      JSON.stringify({ pregnancyInfo: null, events: [], bubbleSpeed: 0.35, themeMode: "dark" })
+      JSON.stringify({
+        pregnancyInfo: null,
+        events: [],
+        bubbleSpeed: 0.35,
+        themeMode: "dark",
+        aiVendor: "zhipu",
+        aiModelZhipu: "glm-4.6v",
+        aiModelAliyun: "qwen3.5-plus",
+        aiSystemPrompt: "你是一个孕妇营养专家",
+        aiUserPrompt:
+          "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+        aiThinking: true,
+        aiImageBaseUrl: "",
+        aiImageMode: "url",
+        aiImageTargetKb: 450
+      })
     );
   }
   return db;
+}
+
+function safeLogValue(v) {
+  if (v == null) return null;
+  if (typeof v === "string") return v.length > 800 ? v.slice(0, 800) : v;
+  if (typeof v === "number" || typeof v === "boolean") return v;
+  if (Array.isArray(v)) return v.slice(0, 50).map((x) => safeLogValue(x));
+  if (typeof v === "object") {
+    const out = {};
+    const entries = Object.entries(v).slice(0, 50);
+    for (const [k, vv] of entries) out[String(k).slice(0, 60)] = safeLogValue(vv);
+    return out;
+  }
+  return String(v).slice(0, 800);
+}
+
+function logEvent(db, level, event, data) {
+  try {
+    const ts = Date.now();
+    const payload = JSON.stringify(safeLogValue(data ?? {}));
+    db.prepare("INSERT INTO logs (ts, level, event, data) VALUES (?, ?, ?, ?)").run(ts, String(level), String(event), payload);
+  } catch {}
+}
+
+async function callAiViaPython(input) {
+  const scriptPath = path.join(process.cwd(), "server", "ai_caller.py");
+  return await new Promise((resolve, reject) => {
+    const child = spawn("python3", [scriptPath], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: process.env
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => {
+      stdout += d.toString("utf8");
+    });
+    child.stderr.on("data", (d) => {
+      stderr += d.toString("utf8");
+    });
+    child.on("error", (err) => reject(err));
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`python caller failed (code ${code}): ${stderr.slice(0, 800)}`));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(stdout || "{}");
+        resolve(parsed);
+      } catch {
+        reject(new Error(`python caller bad output: ${stdout.slice(0, 800)}`));
+      }
+    });
+    child.stdin.write(JSON.stringify(input));
+    child.stdin.end();
+  });
 }
 
 function normalizeEvents(input) {
@@ -63,6 +156,58 @@ function normalizeThemeMode(input) {
   return input === "light" || input === "dark" ? input : "dark";
 }
 
+function normalizeAiModel(input) {
+  const v = typeof input === "string" ? input.trim() : "";
+  if (!v) return "glm-4.6v";
+  if (v.length > 64) return v.slice(0, 64);
+  return v;
+}
+
+function normalizeAiVendor(input) {
+  const v = typeof input === "string" ? input.trim().toLowerCase() : "";
+  if (v === "aliyun" || v === "dashscope" || v === "bailian") return "aliyun";
+  if (v === "zhipu" || v === "zai" || v === "bigmodel") return "zhipu";
+  return "zhipu";
+}
+
+function normalizeAiThinking(input) {
+  return typeof input === "boolean" ? input : true;
+}
+
+function normalizePrompt(input, { fallback, maxLen }) {
+  const v = typeof input === "string" ? input : "";
+  const s = v.replace(/\r\n/g, "\n").trim();
+  if (!s) return fallback;
+  if (s.length > maxLen) return s.slice(0, maxLen);
+  return s;
+}
+
+function decodeBase64Utf8(input) {
+  const s = typeof input === "string" ? input : "";
+  if (!s) return "";
+  try {
+    return Buffer.from(s, "base64").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+function normalizeAiImageMode(input) {
+  return input === "url" || input === "inline" ? input : "url";
+}
+
+function normalizeAiImageBaseUrl(input) {
+  const v = typeof input === "string" ? input.trim() : "";
+  if (!v) return "";
+  if (v.length > 200) return v.slice(0, 200);
+  return v.replace(/\/+$/, "");
+}
+
+function normalizeAiImageTargetKb(input) {
+  const v = typeof input === "number" && Number.isFinite(input) ? Math.round(input) : 450;
+  return Math.min(2000, Math.max(150, v));
+}
+
 function readState(db) {
   const row = db.prepare("SELECT json, updated_at FROM state WHERE id = 1").get();
   let parsed = {};
@@ -73,8 +218,36 @@ function readState(db) {
   const events = normalizeEvents(parsed?.events);
   const bubbleSpeed = normalizeBubbleSpeed(parsed?.bubbleSpeed);
   const themeMode = normalizeThemeMode(parsed?.themeMode);
+  const aiVendor = normalizeAiVendor(parsed?.aiVendor);
+  const aiModelZhipu = normalizeAiModel(parsed?.aiModelZhipu ?? parsed?.aiModel ?? ZAI_MODEL);
+  const aiModelAliyun = normalizeAiModel(parsed?.aiModelAliyun ?? DASHSCOPE_MODEL);
+  const aiSystemPrompt = normalizePrompt(parsed?.aiSystemPrompt, { fallback: "你是一个孕妇营养专家", maxLen: 600 });
+  const aiUserPrompt = normalizePrompt(parsed?.aiUserPrompt, {
+    fallback:
+      "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+    maxLen: 4000
+  });
+  const aiThinking = normalizeAiThinking(parsed?.aiThinking);
+  const aiImageBaseUrl = normalizeAiImageBaseUrl(parsed?.aiImageBaseUrl);
+  const aiImageMode = normalizeAiImageMode(parsed?.aiImageMode);
+  const aiImageTargetKb = normalizeAiImageTargetKb(parsed?.aiImageTargetKb);
   const updatedAt = typeof row?.updated_at === "number" ? row.updated_at : 0;
-  return { pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt };
+  return {
+    pregnancyInfo,
+    events,
+    bubbleSpeed,
+    themeMode,
+    aiVendor,
+    aiModelZhipu,
+    aiModelAliyun,
+    aiSystemPrompt,
+    aiUserPrompt,
+    aiThinking,
+    aiImageBaseUrl,
+    aiImageMode,
+    aiImageTargetKb,
+    updatedAt
+  };
 }
 
 function writeState(db, payload) {
@@ -82,18 +255,62 @@ function writeState(db, payload) {
   const events = normalizeEvents(payload?.events);
   const bubbleSpeed = normalizeBubbleSpeed(payload?.bubbleSpeed);
   const themeMode = normalizeThemeMode(payload?.themeMode);
+  const aiVendor = normalizeAiVendor(payload?.aiVendor);
+  const aiModelZhipu = normalizeAiModel(payload?.aiModelZhipu ?? payload?.aiModel ?? ZAI_MODEL);
+  const aiModelAliyun = normalizeAiModel(payload?.aiModelAliyun ?? DASHSCOPE_MODEL);
+  const aiSystemPrompt = normalizePrompt(payload?.aiSystemPrompt, { fallback: "你是一个孕妇营养专家", maxLen: 600 });
+  const aiUserPrompt = normalizePrompt(payload?.aiUserPrompt, {
+    fallback:
+      "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+    maxLen: 4000
+  });
+  const aiThinking = normalizeAiThinking(payload?.aiThinking);
+  const aiImageBaseUrl = normalizeAiImageBaseUrl(payload?.aiImageBaseUrl);
+  const aiImageMode = normalizeAiImageMode(payload?.aiImageMode);
+  const aiImageTargetKb = normalizeAiImageTargetKb(payload?.aiImageTargetKb);
   const updatedAt = typeof payload?.updatedAt === "number" ? payload.updatedAt : Date.now();
   db.prepare("UPDATE state SET json = ?, updated_at = ? WHERE id = 1").run(
-    JSON.stringify({ pregnancyInfo, events, bubbleSpeed, themeMode }),
+    JSON.stringify({
+      pregnancyInfo,
+      events,
+      bubbleSpeed,
+      themeMode,
+      aiVendor,
+      aiModelZhipu,
+      aiModelAliyun,
+      aiSystemPrompt,
+      aiUserPrompt,
+      aiThinking,
+      aiImageBaseUrl,
+      aiImageMode,
+      aiImageTargetKb
+    }),
     updatedAt
   );
-  return { pregnancyInfo, events, bubbleSpeed, themeMode, updatedAt };
+  return {
+    pregnancyInfo,
+    events,
+    bubbleSpeed,
+    themeMode,
+    aiVendor,
+    aiModelZhipu,
+    aiModelAliyun,
+    aiSystemPrompt,
+    aiUserPrompt,
+    aiThinking,
+    aiImageBaseUrl,
+    aiImageMode,
+    aiImageTargetKb,
+    updatedAt
+  };
 }
 
 const db = openDb();
 const app = express();
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "8mb" }));
+ensureDirPath(UPLOAD_DIR);
+app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "3600s" }));
 
 async function fetchText(url, { timeoutMs, headers } = {}) {
   const ac = new AbortController();
@@ -107,16 +324,39 @@ async function fetchText(url, { timeoutMs, headers } = {}) {
   }
 }
 
-async function fetchJson(url, { timeoutMs, headers } = {}) {
+async function fetchJson(url, { timeoutMs, headers, method, body } = {}) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs ?? 8000);
   try {
-    const res = await fetch(url, { method: "GET", headers, signal: ac.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetch(url, { method: method ?? "GET", headers, body, signal: ac.signal });
+    if (!res.ok) {
+      const ct = String(res.headers.get("content-type") ?? "");
+      let parsed = null;
+      let text = "";
+      try {
+        if (ct.includes("application/json")) parsed = await res.json();
+        else text = await res.text();
+      } catch {}
+      const requestId =
+        typeof parsed?.request_id === "string"
+          ? parsed.request_id
+          : typeof parsed?.requestId === "string"
+            ? parsed.requestId
+            : typeof parsed?.error?.request_id === "string"
+              ? parsed.error.request_id
+              : "";
+      const detail = parsed ? `: ${JSON.stringify(parsed).slice(0, 800)}` : text ? `: ${text.slice(0, 800)}` : "";
+      const err = new Error(`HTTP ${res.status}${detail}`, { cause: { status: res.status, requestId, body: parsed ?? text } });
+      throw err;
+    }
     return await res.json();
   } finally {
     clearTimeout(t);
   }
+}
+
+function sleepMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function stripTags(s) {
@@ -259,6 +499,45 @@ app.get("/api/state", (_req, res) => {
 app.put("/api/state", (req, res) => {
   const next = writeState(db, req.body);
   res.json(next);
+});
+
+app.post("/api/logs/client", (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const event = typeof body?.event === "string" ? body.event.trim().slice(0, 80) : "";
+    if (!event) {
+      res.status(400).json({ error: "missing event" });
+      return;
+    }
+    const level = typeof body?.level === "string" ? body.level.trim().slice(0, 16) : "info";
+    const data = typeof body?.data === "object" && body.data ? body.data : {};
+    logEvent(db, level, `client:${event}`, data);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err?.message ?? "log failed" });
+  }
+});
+
+app.get("/api/logs", (req, res) => {
+  try {
+    const limitRaw = typeof req.query.limit === "string" ? Number(req.query.limit) : 100;
+    const limit = Number.isFinite(limitRaw) ? Math.min(500, Math.max(1, Math.floor(limitRaw))) : 100;
+    const sinceRaw = typeof req.query.since === "string" ? Number(req.query.since) : 0;
+    const since = Number.isFinite(sinceRaw) ? Math.max(0, Math.floor(sinceRaw)) : 0;
+    const rows = db
+      .prepare("SELECT id, ts, level, event, data FROM logs WHERE ts >= ? ORDER BY id DESC LIMIT ?")
+      .all(since, limit);
+    const out = rows.map((r) => {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(r.data ?? "{}");
+      } catch {}
+      return { id: r.id, ts: r.ts, level: r.level, event: r.event, data: parsed };
+    });
+    res.json({ items: out });
+  } catch (err) {
+    res.status(500).json({ error: err?.message ?? "query failed" });
+  }
 });
 
 let metalsCache = { at: 0, currency: "", payload: null };
@@ -411,6 +690,348 @@ app.get("/api/widgets/cngold-prices", async (req, res) => {
     res.status(502).json({ error: err?.message ?? "upstream error" });
   }
 });
+
+app.get("/api/widgets/ai-config", (req, res) => {
+  res.json({
+    vendors: {
+      zhipu: { configured: Boolean(ZAI_API_KEY), model: ZAI_MODEL },
+      aliyun: { configured: Boolean(DASHSCOPE_API_KEY), model: DASHSCOPE_MODEL, baseUrl: DASHSCOPE_BASE_URL }
+    }
+  });
+});
+
+app.post("/api/uploads/image", express.raw({ type: ["image/*"], limit: "5mb" }), (req, res) => {
+  const startedAt = Date.now();
+  try {
+    if (!Buffer.isBuffer(req.body) || req.body.length <= 0) {
+      res.status(400).json({ error: "缺少图片数据" });
+      return;
+    }
+    if (req.body.length > 5_000_000) {
+      res.status(413).json({ error: "图片过大，请压缩到 5MB 以内" });
+      return;
+    }
+    const ct = String(req.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+    if (ct !== "image/jpeg" && ct !== "image/png") {
+      res.status(400).json({ error: "不支持的图片格式，请使用 jpg/png/jpeg" });
+      return;
+    }
+    const ext = ct === "image/png" ? "png" : "jpg";
+    const id = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
+    const filePath = path.join(UPLOAD_DIR, id);
+    fs.writeFileSync(filePath, req.body);
+    logEvent(db, "info", "upload:image", { id, ct, bytes: req.body.length, ms: Date.now() - startedAt });
+    res.json({ id, urlPath: `/uploads/${id}` });
+  } catch (err) {
+    logEvent(db, "error", "upload:image:error", { error: err?.message ?? String(err), ms: Date.now() - startedAt });
+    res.status(500).json({ error: err?.message ?? "write failed" });
+  }
+});
+
+app.post(
+  "/api/widgets/food-check",
+  express.raw({ type: ["image/*", "application/octet-stream"], limit: "6mb" }),
+  async (req, res) => {
+  let localId = "";
+  let vendorForLog = "";
+  let modelForLog = "";
+  let startedAt = 0;
+  try {
+    startedAt = Date.now();
+    localId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(12).toString("hex");
+    let imageBase64 = "";
+    let mimeType = "";
+    let imageUrl = "";
+
+    const ct = String(req.headers["content-type"] ?? "").split(";")[0].trim();
+    const mode = Buffer.isBuffer(req.body) && req.body.length > 0 ? "binary" : "json";
+    if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+      mimeType = ct || "application/octet-stream";
+      if (!/^image\/(png|jpeg|jpg)$/i.test(mimeType)) {
+        res.status(400).json({ error: "不支持的图片格式，请使用 jpg/png/jpeg" });
+        return;
+      }
+      if (req.body.length > 5_000_000) {
+        res.status(413).json({ error: "图片过大，请压缩到 5MB 以内" });
+        return;
+      }
+      imageBase64 = req.body.toString("base64");
+    } else {
+      imageBase64 = typeof req.body?.imageBase64 === "string" ? req.body.imageBase64 : "";
+      mimeType = typeof req.body?.mimeType === "string" ? req.body.mimeType : "";
+      imageUrl = typeof req.body?.imageUrl === "string" ? req.body.imageUrl : "";
+      if (imageUrl) {
+        if (!/^https?:\/\/\S+$/i.test(imageUrl) || imageUrl.length > 2000) {
+          res.status(400).json({ error: "图片 URL 不合法" });
+          return;
+        }
+      }
+      if (!imageBase64 || !mimeType) {
+        if (!imageUrl) {
+          res.status(400).json({ error: "缺少图片数据" });
+          return;
+        }
+      }
+      if (imageBase64 && mimeType) {
+        if (!/^image\/(png|jpeg|jpg)$/i.test(mimeType)) {
+          res.status(400).json({ error: "不支持的图片格式，请使用 jpg/png/jpeg" });
+          return;
+        }
+        if (imageBase64.length > 6_500_000) {
+          res.status(413).json({ error: "图片过大，请压缩到 5MB 以内" });
+          return;
+        }
+      }
+    }
+
+    const imageRef = imageUrl ? imageUrl : `data:${mimeType};base64,${imageBase64}`;
+    const sysB64 = decodeBase64Utf8(req.headers["x-ai-system-prompt-b64"]);
+    const userB64 = decodeBase64Utf8(req.headers["x-ai-user-prompt-b64"]);
+    const requestedSystemPromptRaw =
+      typeof req.body?.systemPrompt === "string"
+        ? req.body.systemPrompt
+        : sysB64
+          ? sysB64
+          : typeof req.headers["x-ai-system-prompt"] === "string"
+            ? req.headers["x-ai-system-prompt"]
+            : "";
+    const requestedUserPromptRaw =
+      typeof req.body?.userPrompt === "string"
+        ? req.body.userPrompt
+        : userB64
+          ? userB64
+          : typeof req.headers["x-ai-user-prompt"] === "string"
+            ? req.headers["x-ai-user-prompt"]
+            : "";
+    const system = normalizePrompt(requestedSystemPromptRaw, { fallback: "你是一个孕妇营养专家", maxLen: 600 });
+    const userText = normalizePrompt(requestedUserPromptRaw, {
+      fallback:
+        "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+      maxLen: 4000
+    });
+
+    const requestedVendorRaw =
+      typeof req.body?.vendor === "string"
+        ? req.body.vendor
+        : typeof req.headers["x-ai-vendor"] === "string"
+          ? req.headers["x-ai-vendor"]
+          : "";
+    const vendor = normalizeAiVendor(String(requestedVendorRaw));
+    vendorForLog = vendor;
+
+    const requestedModelRaw =
+      typeof req.body?.model === "string"
+        ? req.body.model
+        : typeof req.headers["x-ai-model"] === "string"
+          ? req.headers["x-ai-model"]
+          : "";
+    const requestedModel = String(requestedModelRaw).trim();
+    const model = requestedModel ? normalizeAiModel(requestedModel) : vendor === "aliyun" ? DASHSCOPE_MODEL : ZAI_MODEL;
+    modelForLog = model;
+    const requestedThinkingRaw =
+      typeof req.body?.thinking === "boolean"
+        ? req.body.thinking
+        : typeof req.headers["x-ai-thinking"] === "string"
+          ? req.headers["x-ai-thinking"]
+          : undefined;
+    const thinking = typeof requestedThinkingRaw === "boolean" ? requestedThinkingRaw : String(requestedThinkingRaw ?? "") !== "0";
+
+    let imageHost = "";
+    if (imageUrl) {
+      try {
+        imageHost = new URL(imageUrl).host;
+      } catch {}
+    }
+    logEvent(db, "info", "ai:food:start", {
+      localId,
+      vendor,
+      model,
+      thinking,
+      mode,
+      imageBytes: Buffer.isBuffer(req.body) ? req.body.length : null,
+      imageHost
+    });
+
+    const callZhipu = async () => {
+      if (!ZAI_API_KEY) {
+        res.status(503).json({ error: "智谱 AI 未配置，请在服务端配置 ZAI_API_KEY。" });
+        return null;
+      }
+      const payload = {
+        model,
+        messages: [
+          { role: "system", content: system },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userText },
+              { type: "image_url", image_url: { url: imageRef } }
+            ]
+          }
+        ],
+        do_sample: true,
+        temperature: 0.8,
+        top_p: 0.6,
+        stream: false
+      };
+      if (thinking) payload.thinking = { type: "enabled", clear_thinking: true };
+      return await fetchJson("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+        timeoutMs: 25_000,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${ZAI_API_KEY}`
+        },
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+    };
+
+    const callAliyun = async (payload) => {
+      if (!DASHSCOPE_API_KEY) {
+        res.status(503).json({ error: "阿里云百炼未配置，请在服务端配置 DASHSCOPE_API_KEY。" });
+        return null;
+      }
+      const url = `${DASHSCOPE_BASE_URL}/chat/completions`;
+      return await fetchJson(url, {
+        timeoutMs: 25_000,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${DASHSCOPE_API_KEY}`
+        },
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+    };
+
+    if (AI_CALLER === "python") {
+      const py = await callAiViaPython({
+        vendor,
+        model,
+        thinking,
+        system,
+        userText,
+        imageRef,
+        imageUrl,
+        timeout_s: AI_TIMEOUT_S
+      });
+      if (!py || typeof py !== "object" || py.ok !== true) {
+        const st = typeof py?.status == "number" ? py.status : 502;
+        const body = py?.response ?? py?.text ?? py?.error ?? "upstream error";
+        const requestId =
+          typeof py?.response?.request_id === "string"
+            ? py.response.request_id
+            : typeof py?.response?.id === "string"
+              ? py.response.id
+              : "";
+        const detail = typeof body === "string" ? body : JSON.stringify(body).slice(0, 800);
+        throw new Error(`HTTP ${st}: ${detail}`, { cause: { status: st, requestId, body } });
+      }
+      const aiRes = py.response ?? {};
+      const content = aiRes?.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content.trim()) {
+        res.status(502).json({ error: "AI 返回异常" });
+        return;
+      }
+      const requestId =
+        typeof aiRes?.request_id === "string"
+          ? aiRes.request_id
+          : typeof aiRes?.id === "string"
+            ? aiRes.id
+            : "";
+      logEvent(db, "info", "ai:food:ok", { localId, vendor, model, requestId, ms: Date.now() - startedAt });
+      res.json({ vendor, model, content, requestId });
+      return;
+    }
+
+    let aiRes = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (vendor === "aliyun") {
+          const payload1 = {
+            model,
+            messages: [
+              { role: "system", content: system },
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: userText },
+                  { type: "image_url", image_url: { url: imageRef } }
+                ]
+              }
+            ],
+            temperature: 0.8,
+            top_p: 0.6,
+            stream: false
+          };
+          aiRes = await callAliyun(payload1);
+          if (!aiRes) return;
+        } else {
+          aiRes = await callZhipu();
+          if (!aiRes) return;
+        }
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        const st = e?.cause?.status;
+        if (vendor === "aliyun" && st === 400 && imageUrl) {
+          try {
+            const payload2 = {
+              model,
+              messages: [
+                { role: "system", content: system },
+                { role: "user", content: `${userText}\n\n图片地址：${imageUrl}\n（如果你无法直接查看图片，请明确说明，并给出你需要我补充的描述要点。）` }
+              ],
+              temperature: 0.8,
+              top_p: 0.6,
+              stream: false
+            };
+            aiRes = await callAliyun(payload2);
+            lastErr = null;
+            break;
+          } catch (e2) {
+            lastErr = e2;
+          }
+        }
+        if (st === 429 || st === 500 || st === 502 || st === 503 || st === 504) {
+          await sleepMs(450 * (attempt + 1));
+          continue;
+        }
+        break;
+      }
+    }
+    if (!aiRes) throw lastErr ?? new Error("upstream error");
+
+    const content = aiRes?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      res.status(502).json({ error: "AI 返回异常" });
+      return;
+    }
+    const requestId =
+      typeof aiRes?.request_id === "string"
+        ? aiRes.request_id
+        : typeof aiRes?.id === "string"
+          ? aiRes.id
+          : "";
+    logEvent(db, "info", "ai:food:ok", { localId, vendor, model, requestId, ms: Date.now() - startedAt });
+    res.json({ vendor, model, content, requestId });
+  } catch (err) {
+    const requestId = typeof err?.cause?.requestId === "string" ? err.cause.requestId : "";
+    const status = typeof err?.cause?.status === "number" ? err.cause.status : undefined;
+    logEvent(db, "error", "ai:food:error", {
+      localId,
+      vendor: vendorForLog || null,
+      model: modelForLog || null,
+      error: err?.message ?? String(err),
+      requestId,
+      upstreamStatus: status,
+      ms: startedAt ? Date.now() - startedAt : null
+    });
+    res.status(502).json({ error: err?.message ?? "upstream error", requestId, upstreamStatus: status });
+  }
+  }
+);
 
 let chowTaiFookCache = { at: 0, payload: null };
 app.get("/api/widgets/chowtaifook-prices", async (req, res) => {

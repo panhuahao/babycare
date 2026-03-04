@@ -7,6 +7,15 @@ export type RemoteState = {
   updatedAt: number;
   bubbleSpeed: number;
   themeMode: "dark" | "light";
+  aiVendor: "zhipu" | "aliyun";
+  aiModelZhipu: string;
+  aiModelAliyun: string;
+  aiSystemPrompt: string;
+  aiUserPrompt: string;
+  aiThinking: boolean;
+  aiImageBaseUrl: string;
+  aiImageMode: "url" | "inline";
+  aiImageTargetKb: number;
 };
 
 export async function fetchState(signal?: AbortSignal): Promise<RemoteState> {
@@ -119,4 +128,119 @@ export async function fetchCngoldPrices(opts?: { force?: boolean; signal?: Abort
   const data = (await res.json()) as CngoldPricesResponse;
   if (!data || typeof data !== "object") throw new Error("bad response");
   return data;
+}
+
+export type FoodCheckResponse = {
+  vendor?: "zhipu" | "aliyun";
+  model: string;
+  content: string;
+  requestId?: string;
+};
+
+export async function checkFoodByPhoto(
+  payload: {
+    imageBase64: string;
+    mimeType: string;
+    vendor?: "zhipu" | "aliyun";
+    model?: string;
+    thinking?: boolean;
+    systemPrompt?: string;
+    userPrompt?: string;
+  },
+  opts?: { signal?: AbortSignal }
+): Promise<FoodCheckResponse> {
+  const res = await fetch(`/api/widgets/food-check`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: opts?.signal
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) {
+    const rid = typeof data?.requestId === "string" && data.requestId ? ` (request_id: ${data.requestId})` : "";
+    throw new Error(typeof data?.error === "string" ? `${data.error}${rid}` : `HTTP ${res.status}${rid}`);
+  }
+  if (!data || typeof data !== "object") throw new Error("bad response");
+  return data as FoodCheckResponse;
+}
+
+export async function checkFoodByPhotoBinary(
+  payload: {
+    blob: Blob;
+    vendor?: "zhipu" | "aliyun";
+    model?: string;
+    thinking?: boolean;
+    systemPrompt?: string;
+    userPrompt?: string;
+  },
+  opts?: { signal?: AbortSignal }
+): Promise<FoodCheckResponse> {
+  const toBase64 = (s: string) => {
+    const enc = new TextEncoder().encode(s);
+    let bin = "";
+    for (let i = 0; i < enc.length; i++) bin += String.fromCharCode(enc[i]);
+    return btoa(bin);
+  };
+  const headers: Record<string, string> = {};
+  if (payload.vendor) headers["x-ai-vendor"] = payload.vendor;
+  if (payload.model) headers["x-ai-model"] = payload.model;
+  if (typeof payload.thinking === "boolean") headers["x-ai-thinking"] = payload.thinking ? "1" : "0";
+  if (payload.systemPrompt) headers["x-ai-system-prompt-b64"] = toBase64(payload.systemPrompt);
+  if (payload.userPrompt) headers["x-ai-user-prompt-b64"] = toBase64(payload.userPrompt);
+  const res = await fetch(`/api/widgets/food-check`, {
+    method: "POST",
+    headers,
+    body: payload.blob,
+    signal: opts?.signal
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) {
+    const rid = typeof data?.requestId === "string" && data.requestId ? ` (request_id: ${data.requestId})` : "";
+    throw new Error(typeof data?.error === "string" ? `${data.error}${rid}` : `HTTP ${res.status}${rid}`);
+  }
+  if (!data || typeof data !== "object") throw new Error("bad response");
+  return data as FoodCheckResponse;
+}
+
+export async function uploadFoodImage(payload: { blob: Blob }, opts?: { signal?: AbortSignal }): Promise<{ id: string; urlPath: string }> {
+  const res = await fetch(`/api/uploads/image`, {
+    method: "POST",
+    headers: { "content-type": payload.blob.type || "image/jpeg" },
+    body: payload.blob,
+    signal: opts?.signal
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) throw new Error(typeof data?.error === "string" ? data.error : `HTTP ${res.status}`);
+  if (!data || typeof data !== "object") throw new Error("bad response");
+  return { id: String(data.id ?? ""), urlPath: String(data.urlPath ?? "") };
+}
+
+export async function checkFoodByImageUrl(
+  payload: { imageUrl: string; vendor?: "zhipu" | "aliyun"; model?: string; thinking?: boolean; systemPrompt?: string; userPrompt?: string },
+  opts?: { signal?: AbortSignal }
+): Promise<FoodCheckResponse> {
+  const res = await fetch(`/api/widgets/food-check`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: opts?.signal
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) {
+    const rid = typeof data?.requestId === "string" && data.requestId ? ` (request_id: ${data.requestId})` : "";
+    throw new Error(typeof data?.error === "string" ? `${data.error}${rid}` : `HTTP ${res.status}${rid}`);
+  }
+  if (!data || typeof data !== "object") throw new Error("bad response");
+  return data as FoodCheckResponse;
+}
+
+export async function postClientLog(payload: { event: string; level?: "info" | "warn" | "error"; data?: any }): Promise<void> {
+  try {
+    await fetch("/api/logs/client", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true
+    });
+  } catch {}
 }
