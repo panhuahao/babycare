@@ -19,6 +19,7 @@ const DASHSCOPE_BASE_URL = String(process.env.DASHSCOPE_BASE_URL ?? "https://das
 const AI_CALLER = String(process.env.AI_CALLER ?? "python").trim().toLowerCase();
 const AI_TIMEOUT_S = Math.min(120, Math.max(5, Number(process.env.AI_TIMEOUT_S ?? 40) || 40));
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(path.dirname(DB_PATH), "uploads");
+const DAILY_MENU_JSON = process.env.DAILY_MENU_JSON ?? path.join(process.cwd(), "server", "daily_menu_data.json");
 const TOZ_GRAMS = 31.1034768;
 const JIJINHAO_HEADERS = {
   "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
@@ -65,6 +66,11 @@ function openDb() {
         aiSystemPrompt: "你是一个孕妇营养专家",
         aiUserPrompt:
           "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+        aiUserPromptDefault:
+          "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+        aiMenuRecipeSystemPrompt: "你是一个孕妇饮食助手，简短输出菜名与配菜。",
+        aiMenuRecipePrompt: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
+        aiMenuRecipePromptDefault: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
         aiThinking: true,
         aiImageBaseUrl: "",
         aiImageMode: "url",
@@ -227,6 +233,23 @@ function readState(db) {
       "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
     maxLen: 4000
   });
+  const aiUserPromptDefault = normalizePrompt(parsed?.aiUserPromptDefault, {
+    fallback:
+      "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+    maxLen: 4000
+  });
+  const aiMenuRecipeSystemPrompt = normalizePrompt(parsed?.aiMenuRecipeSystemPrompt, {
+    fallback: "你是一个孕妇饮食助手，简短输出菜名与配菜。",
+    maxLen: 600
+  });
+  const aiMenuRecipePrompt = normalizePrompt(parsed?.aiMenuRecipePrompt, {
+    fallback: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
+    maxLen: 600
+  });
+  const aiMenuRecipePromptDefault = normalizePrompt(parsed?.aiMenuRecipePromptDefault, {
+    fallback: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
+    maxLen: 600
+  });
   const aiThinking = normalizeAiThinking(parsed?.aiThinking);
   const aiImageBaseUrl = normalizeAiImageBaseUrl(parsed?.aiImageBaseUrl);
   const aiImageMode = normalizeAiImageMode(parsed?.aiImageMode);
@@ -242,6 +265,10 @@ function readState(db) {
     aiModelAliyun,
     aiSystemPrompt,
     aiUserPrompt,
+    aiUserPromptDefault,
+    aiMenuRecipeSystemPrompt,
+    aiMenuRecipePrompt,
+    aiMenuRecipePromptDefault,
     aiThinking,
     aiImageBaseUrl,
     aiImageMode,
@@ -264,6 +291,23 @@ function writeState(db, payload) {
       "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
     maxLen: 4000
   });
+  const aiUserPromptDefault = normalizePrompt(payload?.aiUserPromptDefault, {
+    fallback:
+      "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+    maxLen: 4000
+  });
+  const aiMenuRecipeSystemPrompt = normalizePrompt(payload?.aiMenuRecipeSystemPrompt, {
+    fallback: "你是一个孕妇饮食助手，简短输出菜名与配菜。",
+    maxLen: 600
+  });
+  const aiMenuRecipePrompt = normalizePrompt(payload?.aiMenuRecipePrompt, {
+    fallback: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
+    maxLen: 600
+  });
+  const aiMenuRecipePromptDefault = normalizePrompt(payload?.aiMenuRecipePromptDefault, {
+    fallback: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
+    maxLen: 600
+  });
   const aiThinking = normalizeAiThinking(payload?.aiThinking);
   const aiImageBaseUrl = normalizeAiImageBaseUrl(payload?.aiImageBaseUrl);
   const aiImageMode = normalizeAiImageMode(payload?.aiImageMode);
@@ -280,6 +324,10 @@ function writeState(db, payload) {
       aiModelAliyun,
       aiSystemPrompt,
       aiUserPrompt,
+      aiUserPromptDefault,
+      aiMenuRecipeSystemPrompt,
+      aiMenuRecipePrompt,
+      aiMenuRecipePromptDefault,
       aiThinking,
       aiImageBaseUrl,
       aiImageMode,
@@ -297,6 +345,10 @@ function writeState(db, payload) {
     aiModelAliyun,
     aiSystemPrompt,
     aiUserPrompt,
+    aiUserPromptDefault,
+    aiMenuRecipeSystemPrompt,
+    aiMenuRecipePrompt,
+    aiMenuRecipePromptDefault,
     aiThinking,
     aiImageBaseUrl,
     aiImageMode,
@@ -488,6 +540,52 @@ async function fetchJijinhaoQuotes(codes, { referer, origin, timeoutMs } = {}) {
   return { quotes: merged, updatedAt: updatedAt || null };
 }
 
+let dailyMenuDataCache = { mtimeMs: 0, payload: null };
+
+function parseYmdUtcStart(ymd) {
+  const m = String(ymd ?? "").trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mm = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isInteger(y) || !Number.isInteger(mm) || !Number.isInteger(d)) return null;
+  if (mm < 1 || mm > 12 || d < 1 || d > 31) return null;
+  const ts = Date.UTC(y, mm - 1, d);
+  const dt = new Date(ts);
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mm - 1 || dt.getUTCDate() !== d) return null;
+  return ts;
+}
+
+function formatYmdFromUtcMs(ts) {
+  const d = new Date(ts);
+  const y = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${mm}-${dd}`;
+}
+
+function loadDailyMenuData() {
+  if (!fs.existsSync(DAILY_MENU_JSON)) {
+    throw new Error(`menu data file not found: ${DAILY_MENU_JSON}`);
+  }
+  const stat = fs.statSync(DAILY_MENU_JSON);
+  const mtimeMs = Number(stat.mtimeMs || 0);
+  if (dailyMenuDataCache.payload && dailyMenuDataCache.mtimeMs === mtimeMs) {
+    return { payload: dailyMenuDataCache.payload, cached: true };
+  }
+  let payload = null;
+  try {
+    payload = JSON.parse(fs.readFileSync(DAILY_MENU_JSON, "utf8"));
+  } catch {
+    throw new Error(`menu data bad json: ${DAILY_MENU_JSON}`);
+  }
+  if (!payload || !Array.isArray(payload.weeks) || payload.weeks.length <= 0) {
+    throw new Error("menu data is empty");
+  }
+  dailyMenuDataCache = { mtimeMs, payload };
+  return { payload, cached: false };
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -537,6 +635,226 @@ app.get("/api/logs", (req, res) => {
     res.json({ items: out });
   } catch (err) {
     res.status(500).json({ error: err?.message ?? "query failed" });
+  }
+});
+
+app.get("/api/widgets/daily-menu", (req, res) => {
+  try {
+    const wb = loadDailyMenuData();
+    const dateRaw = typeof req.query.date === "string" ? req.query.date.trim() : "";
+    const todayRaw = typeof req.query.today === "string" ? req.query.today.trim() : "";
+    const anchorDate = todayRaw || formatYmdFromUtcMs(Date.now());
+    const selectedDate = dateRaw || anchorDate;
+    const anchorTs = parseYmdUtcStart(anchorDate);
+    const selectedTs = parseYmdUtcStart(selectedDate);
+    if (anchorTs == null) {
+      res.status(400).json({ error: "today must be YYYY-MM-DD" });
+      return;
+    }
+    if (selectedTs == null) {
+      res.status(400).json({ error: "date must be YYYY-MM-DD" });
+      return;
+    }
+
+    const weeks = wb.payload.weeks;
+    const totalWeeks = weeks.length;
+    const daysPerWeek = 7;
+    const totalCycleDays = totalWeeks * daysPerWeek;
+    if (totalCycleDays <= 0) {
+      res.status(500).json({ error: "menu data is empty" });
+      return;
+    }
+
+    const anchorIndex = 3; // Week1 周四
+    const offsetDays = Math.round((selectedTs - anchorTs) / 86_400_000);
+    const cycleIndex = ((anchorIndex + offsetDays) % totalCycleDays + totalCycleDays) % totalCycleDays;
+    const weekIndex = Math.floor(cycleIndex / daysPerWeek);
+    const dayIndex = cycleIndex % daysPerWeek;
+    const week = weeks[weekIndex];
+    const day = Array.isArray(week?.days) ? week.days.find((d) => d?.dayIndex === dayIndex) ?? week.days[dayIndex] : null;
+    if (!week || !day) {
+      res.status(500).json({ error: "menu data format invalid" });
+      return;
+    }
+
+    res.json({
+      selectedDate,
+      anchorDate,
+      offsetDays,
+      weekNo: week.weekNo,
+      weekTitle: week.title,
+      weekday: day.weekday,
+      dayIndex,
+      cycleIndex,
+      totalWeeks,
+      totalCycleDays,
+      items: Array.isArray(day.items) ? day.items : [],
+      cachedWorkbook: wb.cached
+    });
+  } catch (err) {
+    res.status(500).json({ error: err?.message ?? "load menu failed" });
+  }
+});
+
+app.post("/api/widgets/menu-recipe", async (req, res) => {
+  let localId = "";
+  let vendorForLog = "";
+  let modelForLog = "";
+  let startedAt = 0;
+  try {
+    startedAt = Date.now();
+    localId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(12).toString("hex");
+    const body = req.body ?? {};
+    const meal = typeof body?.meal === "string" ? body.meal.trim().slice(0, 32) : "";
+    const food = typeof body?.food === "string" ? body.food.trim().slice(0, 200) : "";
+    const date = typeof body?.date === "string" ? body.date.trim().slice(0, 16) : "";
+    const weekday = typeof body?.weekday === "string" ? body.weekday.trim().slice(0, 8) : "";
+    const weekNo = Number.isFinite(Number(body?.weekNo)) ? Math.max(1, Math.min(16, Number(body.weekNo))) : null;
+    if (!meal && !food) {
+      res.status(400).json({ error: "缺少餐次或食材信息" });
+      return;
+    }
+
+    const st = readState(db);
+    const requestedVendorRaw = typeof body?.vendor === "string" ? body.vendor : st.aiVendor;
+    const vendor = normalizeAiVendor(String(requestedVendorRaw));
+    vendorForLog = vendor;
+    const requestedModelRaw = typeof body?.model === "string" ? body.model : "";
+    const requestedModel = String(requestedModelRaw).trim();
+    const model = requestedModel
+      ? normalizeAiModel(requestedModel)
+      : vendor === "aliyun"
+        ? normalizeAiModel(st.aiModelAliyun || DASHSCOPE_MODEL)
+        : normalizeAiModel(st.aiModelZhipu || ZAI_MODEL);
+    modelForLog = model;
+    const thinking = typeof body?.thinking === "boolean" ? body.thinking : false;
+    const menuAiTimeoutMs = Math.min(120_000, Math.max(20_000, Number(process.env.MENU_AI_TIMEOUT_MS ?? 65_000) || 65_000));
+    const menuAiMaxTokens = Math.min(800, Math.max(64, Number(process.env.MENU_AI_MAX_TOKENS ?? 220) || 220));
+    const defaultSystem = "你是一个孕妇饮食助手，简短输出菜名与配菜。";
+    const system = normalizePrompt(body?.systemPrompt ?? st.aiMenuRecipeSystemPrompt, { fallback: defaultSystem, maxLen: 600 });
+    const defaultMenuPrompt = "根据当前食材为孕妇推荐1-3道菜，补充所需食材";
+    const menuPrompt = normalizePrompt(body?.menuPrompt ?? st.aiMenuRecipePrompt, { fallback: defaultMenuPrompt, maxLen: 600 });
+    const userText = [
+      menuPrompt,
+      meal ? `餐次：${meal}` : "",
+      food ? `现有食材：${food}` : "",
+      date ? `日期：${date}` : "",
+      weekday ? `星期：${weekday}` : "",
+      weekNo ? `食谱周次：Week${weekNo}` : ""
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const callZhipu = async () => {
+      if (!ZAI_API_KEY) {
+        res.status(503).json({ error: "智谱 AI 未配置，请在服务端配置 ZAI_API_KEY。" });
+        return null;
+      }
+      const payload = {
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userText }
+        ],
+        do_sample: true,
+        temperature: 0.7,
+        top_p: 0.8,
+        stream: false
+      };
+      if (thinking) payload.thinking = { type: "enabled", clear_thinking: true };
+      return await fetchJson("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+        timeoutMs: menuAiTimeoutMs,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${ZAI_API_KEY}`
+        },
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+    };
+
+    const callAliyun = async () => {
+      if (!DASHSCOPE_API_KEY) {
+        res.status(503).json({ error: "阿里云百炼未配置，请在服务端配置 DASHSCOPE_API_KEY。" });
+        return null;
+      }
+      const payload = {
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: userText }
+        ],
+        temperature: 0.7,
+        top_p: 0.8,
+        max_tokens: menuAiMaxTokens,
+        enable_thinking: Boolean(thinking),
+        enable_search: false,
+        stream: false
+      };
+      return await fetchJson(`${DASHSCOPE_BASE_URL}/chat/completions`, {
+        timeoutMs: menuAiTimeoutMs,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${DASHSCOPE_API_KEY}`
+        },
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+    };
+
+    let aiRes = null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        aiRes = vendor === "aliyun" ? await callAliyun() : await callZhipu();
+        if (!aiRes) return;
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        const stCode = e?.cause?.status;
+        const name = String(e?.name ?? "");
+        const msg = String(e?.message ?? "").toLowerCase();
+        const abortedLike = name === "AbortError" || msg.includes("aborted") || msg.includes("timeout");
+        if (abortedLike || stCode === 429 || stCode === 500 || stCode === 502 || stCode === 503 || stCode === 504) {
+          await sleepMs(450 * (attempt + 1));
+          continue;
+        }
+        break;
+      }
+    }
+    if (!aiRes) throw lastErr ?? new Error("upstream error");
+
+    const content = aiRes?.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      res.status(502).json({ error: "AI 返回异常" });
+      return;
+    }
+    const requestId =
+      typeof aiRes?.request_id === "string"
+        ? aiRes.request_id
+        : typeof aiRes?.id === "string"
+          ? aiRes.id
+          : "";
+    logEvent(db, "info", "ai:menu_recipe:ok", { localId, vendor, model, requestId, ms: Date.now() - startedAt });
+    res.json({ vendor, model, content, requestId });
+  } catch (err) {
+    const requestId = typeof err?.cause?.requestId === "string" ? err.cause.requestId : "";
+    const status = typeof err?.cause?.status === "number" ? err.cause.status : undefined;
+    const name = String(err?.name ?? "");
+    const msgLower = String(err?.message ?? "").toLowerCase();
+    const timeoutLike = name === "AbortError" || msgLower.includes("aborted") || msgLower.includes("timeout");
+    const friendlyError = timeoutLike ? "AI 响应超时，请稍后重试（可稍后再试，或在设置里关闭 Thinking）" : err?.message ?? "upstream error";
+    logEvent(db, "error", "ai:menu_recipe:error", {
+      localId,
+      vendor: vendorForLog || null,
+      model: modelForLog || null,
+      error: friendlyError,
+      requestId,
+      upstreamStatus: status,
+      ms: startedAt ? Date.now() - startedAt : null
+    });
+    res.status(timeoutLike ? 504 : 502).json({ error: friendlyError, requestId, upstreamStatus: status });
   }
 });
 
@@ -962,6 +1280,8 @@ app.post(
             ],
             temperature: 0.8,
             top_p: 0.6,
+            enable_thinking: Boolean(thinking),
+            enable_search: false,
             stream: false
           };
           aiRes = await callAliyun(payload1);
@@ -985,6 +1305,8 @@ app.post(
               ],
               temperature: 0.8,
               top_p: 0.6,
+              enable_thinking: Boolean(thinking),
+              enable_search: false,
               stream: false
             };
             aiRes = await callAliyun(payload2);

@@ -11,6 +11,10 @@ const KEY_AI_MODEL_ZHIPU = "bbcare:aiModelZhipu";
 const KEY_AI_MODEL_ALIYUN = "bbcare:aiModelAliyun";
 const KEY_AI_SYSTEM_PROMPT = "bbcare:aiSystemPrompt";
 const KEY_AI_USER_PROMPT = "bbcare:aiUserPrompt";
+const KEY_AI_USER_PROMPT_DEFAULT = "bbcare:aiUserPromptDefault";
+const KEY_AI_MENU_RECIPE_SYSTEM_PROMPT = "bbcare:aiMenuRecipeSystemPrompt";
+const KEY_AI_MENU_RECIPE_PROMPT = "bbcare:aiMenuRecipePrompt";
+const KEY_AI_MENU_RECIPE_PROMPT_DEFAULT = "bbcare:aiMenuRecipePromptDefault";
 const KEY_AI_THINKING = "bbcare:aiThinking";
 const KEY_AI_IMAGE_BASE_URL = "bbcare:aiImageBaseUrl";
 const KEY_AI_IMAGE_MODE = "bbcare:aiImageMode";
@@ -19,6 +23,8 @@ const KEY_AI_IMAGE_TARGET_KB = "bbcare:aiImageTargetKb";
 const DEFAULT_SYSTEM_PROMPT = "你是一个孕妇营养专家";
 const DEFAULT_USER_PROMPT =
   "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。";
+const DEFAULT_MENU_RECIPE_SYSTEM_PROMPT = "你是一个孕妇饮食助手，简短输出菜名与配菜。";
+const DEFAULT_MENU_RECIPE_PROMPT = "根据当前食材为孕妇推荐1-3道菜，补充所需食材";
 
 export type AppState = {
   pregnancyInfo: PregnancyInfo;
@@ -31,6 +37,10 @@ export type AppState = {
   aiModelAliyun: string;
   aiSystemPrompt: string;
   aiUserPrompt: string;
+  aiUserPromptDefault: string;
+  aiMenuRecipeSystemPrompt: string;
+  aiMenuRecipePrompt: string;
+  aiMenuRecipePromptDefault: string;
   aiThinking: boolean;
   aiImageBaseUrl: string;
   aiImageMode: "url" | "inline";
@@ -89,6 +99,10 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
       const aiModelAliyun = normalizeAiModel(parsed?.aiModelAliyun, "qwen3.5-plus");
       const aiSystemPrompt = normalizePrompt(parsed?.aiSystemPrompt, DEFAULT_SYSTEM_PROMPT, 600);
       const aiUserPrompt = normalizePrompt(parsed?.aiUserPrompt, DEFAULT_USER_PROMPT, 4000);
+      const aiUserPromptDefault = normalizePrompt(parsed?.aiUserPromptDefault, DEFAULT_USER_PROMPT, 4000);
+      const aiMenuRecipeSystemPrompt = normalizePrompt(parsed?.aiMenuRecipeSystemPrompt, DEFAULT_MENU_RECIPE_SYSTEM_PROMPT, 600);
+      const aiMenuRecipePrompt = normalizePrompt(parsed?.aiMenuRecipePrompt, DEFAULT_MENU_RECIPE_PROMPT, 600);
+      const aiMenuRecipePromptDefault = normalizePrompt(parsed?.aiMenuRecipePromptDefault, DEFAULT_MENU_RECIPE_PROMPT, 600);
       const at0 = typeof parsed?.aiThinking === "boolean" ? parsed.aiThinking : undefined;
       const aiThinking = at0 ?? true;
       const bu0 = typeof parsed?.aiImageBaseUrl === "string" ? parsed.aiImageBaseUrl.trim().replace(/\/+$/, "") : "";
@@ -110,6 +124,10 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
         aiModelAliyun,
         aiSystemPrompt,
         aiUserPrompt,
+        aiUserPromptDefault,
+        aiMenuRecipeSystemPrompt,
+        aiMenuRecipePrompt,
+        aiMenuRecipePromptDefault,
         aiThinking,
         aiImageBaseUrl,
         aiImageMode,
@@ -127,6 +145,10 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
   let aiModelAliyun = "qwen3.5-plus";
   let aiSystemPrompt = DEFAULT_SYSTEM_PROMPT;
   let aiUserPrompt = DEFAULT_USER_PROMPT;
+  let aiUserPromptDefault = DEFAULT_USER_PROMPT;
+  let aiMenuRecipeSystemPrompt = DEFAULT_MENU_RECIPE_SYSTEM_PROMPT;
+  let aiMenuRecipePrompt = DEFAULT_MENU_RECIPE_PROMPT;
+  let aiMenuRecipePromptDefault = DEFAULT_MENU_RECIPE_PROMPT;
   let aiThinking = true;
   const origin = typeof window !== "undefined" && window?.location?.origin ? String(window.location.origin).replace(/\/+$/, "") : "";
   let aiImageBaseUrl = origin;
@@ -170,6 +192,22 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
     if (typeof raw === "string") aiUserPrompt = normalizePrompt(raw, DEFAULT_USER_PROMPT, 4000);
   } catch {}
   try {
+    const raw = localStorage.getItem(KEY_AI_USER_PROMPT_DEFAULT);
+    if (typeof raw === "string") aiUserPromptDefault = normalizePrompt(raw, DEFAULT_USER_PROMPT, 4000);
+  } catch {}
+  try {
+    const raw = localStorage.getItem(KEY_AI_MENU_RECIPE_SYSTEM_PROMPT);
+    if (typeof raw === "string") aiMenuRecipeSystemPrompt = normalizePrompt(raw, DEFAULT_MENU_RECIPE_SYSTEM_PROMPT, 600);
+  } catch {}
+  try {
+    const raw = localStorage.getItem(KEY_AI_MENU_RECIPE_PROMPT);
+    if (typeof raw === "string") aiMenuRecipePrompt = normalizePrompt(raw, DEFAULT_MENU_RECIPE_PROMPT, 600);
+  } catch {}
+  try {
+    const raw = localStorage.getItem(KEY_AI_MENU_RECIPE_PROMPT_DEFAULT);
+    if (typeof raw === "string") aiMenuRecipePromptDefault = normalizePrompt(raw, DEFAULT_MENU_RECIPE_PROMPT, 600);
+  } catch {}
+  try {
     const raw = localStorage.getItem(KEY_AI_THINKING);
     if (raw === "0") aiThinking = false;
     else if (raw === "1") aiThinking = true;
@@ -199,6 +237,10 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
     aiModelAliyun,
     aiSystemPrompt,
     aiUserPrompt,
+    aiUserPromptDefault,
+    aiMenuRecipeSystemPrompt,
+    aiMenuRecipePrompt,
+    aiMenuRecipePromptDefault,
     aiThinking,
     aiImageBaseUrl,
     aiImageMode,
@@ -217,6 +259,10 @@ export function saveState(state: AppState) {
   localStorage.setItem(KEY_AI_MODEL_ALIYUN, state.aiModelAliyun);
   localStorage.setItem(KEY_AI_SYSTEM_PROMPT, state.aiSystemPrompt);
   localStorage.setItem(KEY_AI_USER_PROMPT, state.aiUserPrompt);
+  localStorage.setItem(KEY_AI_USER_PROMPT_DEFAULT, state.aiUserPromptDefault);
+  localStorage.setItem(KEY_AI_MENU_RECIPE_SYSTEM_PROMPT, state.aiMenuRecipeSystemPrompt);
+  localStorage.setItem(KEY_AI_MENU_RECIPE_PROMPT, state.aiMenuRecipePrompt);
+  localStorage.setItem(KEY_AI_MENU_RECIPE_PROMPT_DEFAULT, state.aiMenuRecipePromptDefault);
   localStorage.setItem(KEY_AI_THINKING, state.aiThinking ? "1" : "0");
   localStorage.setItem(KEY_AI_IMAGE_BASE_URL, state.aiImageBaseUrl);
   localStorage.setItem(KEY_AI_IMAGE_MODE, state.aiImageMode);
@@ -234,6 +280,10 @@ export function clearAll() {
   localStorage.removeItem(KEY_AI_MODEL_ALIYUN);
   localStorage.removeItem(KEY_AI_SYSTEM_PROMPT);
   localStorage.removeItem(KEY_AI_USER_PROMPT);
+  localStorage.removeItem(KEY_AI_USER_PROMPT_DEFAULT);
+  localStorage.removeItem(KEY_AI_MENU_RECIPE_SYSTEM_PROMPT);
+  localStorage.removeItem(KEY_AI_MENU_RECIPE_PROMPT);
+  localStorage.removeItem(KEY_AI_MENU_RECIPE_PROMPT_DEFAULT);
   localStorage.removeItem(KEY_AI_THINKING);
   localStorage.removeItem(KEY_AI_IMAGE_BASE_URL);
   localStorage.removeItem(KEY_AI_IMAGE_MODE);

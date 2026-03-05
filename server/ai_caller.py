@@ -74,7 +74,7 @@ def _zhipu_payload(model: str, system_prompt: str, user_text: str, image_ref: st
     return payload
 
 
-def _dashscope_payload(model: str, system_prompt: str, user_text: str, image_ref: str):
+def _dashscope_payload(model: str, system_prompt: str, user_text: str, image_ref: str, thinking: bool):
     return {
         "model": model,
         "messages": [
@@ -89,11 +89,13 @@ def _dashscope_payload(model: str, system_prompt: str, user_text: str, image_ref
         ],
         "temperature": 0.8,
         "top_p": 0.6,
+        "enable_thinking": bool(thinking),
+        "enable_search": False,
         "stream": False,
     }
 
 
-def _dashscope_fallback_payload(model: str, system_prompt: str, user_text: str, image_url: str):
+def _dashscope_fallback_payload(model: str, system_prompt: str, user_text: str, image_url: str, thinking: bool):
     return {
         "model": model,
         "messages": [
@@ -102,6 +104,8 @@ def _dashscope_fallback_payload(model: str, system_prompt: str, user_text: str, 
         ],
         "temperature": 0.8,
         "top_p": 0.6,
+        "enable_thinking": bool(thinking),
+        "enable_search": False,
         "stream": False,
     }
 
@@ -130,7 +134,7 @@ def main():
                 return 0
             base = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
             url = f"{base}/chat/completions"
-            payload1 = _dashscope_payload(model, system_prompt, user_text, image_ref)
+            payload1 = _dashscope_payload(model, system_prompt, user_text, image_ref, thinking)
 
             last = None
             for attempt in range(2):
@@ -139,7 +143,7 @@ def main():
                     break
                 st = int(last.get("status") or 0)
                 if st == 400 and image_url:
-                    payload2 = _dashscope_fallback_payload(model, system_prompt, user_text, image_url)
+                    payload2 = _dashscope_fallback_payload(model, system_prompt, user_text, image_url, thinking)
                     last = _post_json(url, api_key, payload2, timeout_s)
                     break
                 if st in (429, 500, 502, 503, 504, 599):

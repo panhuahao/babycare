@@ -16,7 +16,7 @@ import { computePregnancy, defaultPregnancyInfo, formatGestation, PregnancyInfo 
 import { clearAll, loadState, saveState } from "./storage";
 import { navTo, Route, toHash } from "./routes";
 import { useHashRoute } from "./useHashRoute";
-import { checkFoodByImageUrl, checkFoodByPhotoBinary, uploadFoodImage, CngoldPriceItem, CngoldPricesResponse, fetchCngoldPrices, fetchState, pushState, postClientLog } from "./api";
+import { checkFoodByImageUrl, checkFoodByPhotoBinary, uploadFoodImage, CngoldPriceItem, CngoldPricesResponse, DailyMenuMeal, DailyMenuResponse, fetchCngoldPrices, fetchDailyMenu, fetchState, pushState, postClientLog, suggestMenuRecipe } from "./api";
 
 function Icon({ name }: { name: "calendar" | "bell" | "home" | "chart" | "grid" | "user" | "chev" }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", xmlns: "http://www.w3.org/2000/svg" };
@@ -999,6 +999,14 @@ function MinePage({
   onAiSystemPromptChange,
   aiUserPrompt,
   onAiUserPromptChange,
+  aiUserPromptDefault,
+  onAiUserPromptDefaultChange,
+  aiMenuRecipeSystemPrompt,
+  onAiMenuRecipeSystemPromptChange,
+  aiMenuRecipePrompt,
+  aiMenuRecipePromptDefault,
+  onAiMenuRecipePromptChange,
+  onAiMenuRecipePromptDefaultChange,
   aiThinking,
   onAiThinkingChange,
   aiImageBaseUrl,
@@ -1022,6 +1030,10 @@ function MinePage({
     aiModelAliyun?: string;
     aiSystemPrompt?: string;
     aiUserPrompt?: string;
+    aiUserPromptDefault?: string;
+    aiMenuRecipeSystemPrompt?: string;
+    aiMenuRecipePrompt?: string;
+    aiMenuRecipePromptDefault?: string;
     aiThinking?: boolean;
     aiImageBaseUrl?: string;
     aiImageMode?: "url" | "inline";
@@ -1042,6 +1054,14 @@ function MinePage({
   onAiSystemPromptChange: (v: string) => void;
   aiUserPrompt: string;
   onAiUserPromptChange: (v: string) => void;
+  aiUserPromptDefault: string;
+  onAiUserPromptDefaultChange: (v: string) => void;
+  aiMenuRecipeSystemPrompt: string;
+  onAiMenuRecipeSystemPromptChange: (v: string) => void;
+  aiMenuRecipePrompt: string;
+  aiMenuRecipePromptDefault: string;
+  onAiMenuRecipePromptChange: (v: string) => void;
+  onAiMenuRecipePromptDefaultChange: (v: string) => void;
   aiThinking: boolean;
   onAiThinkingChange: (v: boolean) => void;
   aiImageBaseUrl: string;
@@ -1058,6 +1078,8 @@ function MinePage({
   const defaultSystemPrompt = "你是一个孕妇营养专家";
   const defaultUserPrompt =
     "请根据图片判断这是什么食物/菜品，并回答：\n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。";
+  const defaultMenuRecipeSystemPrompt = "你是一个孕妇饮食助手，简短输出菜名与配菜。";
+  const defaultMenuRecipePrompt = "根据当前食材为孕妇推荐1-3道菜，补充所需食材";
 
   function exportBackup() {
     const payload = {
@@ -1072,6 +1094,10 @@ function MinePage({
       aiModelAliyun,
       aiSystemPrompt,
       aiUserPrompt,
+      aiUserPromptDefault,
+      aiMenuRecipeSystemPrompt,
+      aiMenuRecipePrompt,
+      aiMenuRecipePromptDefault,
       aiThinking,
       aiImageBaseUrl,
       aiImageMode,
@@ -1107,6 +1133,10 @@ function MinePage({
     const ama = parsed?.aiModelAliyun;
     const asp = parsed?.aiSystemPrompt;
     const aup = parsed?.aiUserPrompt;
+    const aupd = parsed?.aiUserPromptDefault;
+    const amrsp = parsed?.aiMenuRecipeSystemPrompt;
+    const amrp = parsed?.aiMenuRecipePrompt;
+    const amrpd = parsed?.aiMenuRecipePromptDefault;
     const at = parsed?.aiThinking;
     const abu = parsed?.aiImageBaseUrl;
     const amode = parsed?.aiImageMode;
@@ -1130,6 +1160,10 @@ function MinePage({
     const nextAiModelAliyun = typeof ama === "string" && ama.trim() ? ama.trim().slice(0, 64) : undefined;
     const nextAiSystemPrompt = typeof asp === "string" && asp.trim() ? asp.trim().slice(0, 600) : undefined;
     const nextAiUserPrompt = typeof aup === "string" && aup.trim() ? aup.trim().slice(0, 4000) : undefined;
+    const nextAiUserPromptDefault = typeof aupd === "string" && aupd.trim() ? aupd.trim().slice(0, 4000) : undefined;
+    const nextAiMenuRecipeSystemPrompt = typeof amrsp === "string" && amrsp.trim() ? amrsp.trim().slice(0, 600) : undefined;
+    const nextAiMenuRecipePrompt = typeof amrp === "string" && amrp.trim() ? amrp.trim().slice(0, 600) : undefined;
+    const nextAiMenuRecipePromptDefault = typeof amrpd === "string" && amrpd.trim() ? amrpd.trim().slice(0, 600) : undefined;
     const nextAiThinking = typeof at === "boolean" ? at : undefined;
     const nextAiImageBaseUrl = typeof abu === "string" && abu.trim() ? abu.trim().replace(/\/+$/, "").slice(0, 200) : undefined;
     const nextAiImageMode = amode === "url" || amode === "inline" ? amode : undefined;
@@ -1141,6 +1175,10 @@ function MinePage({
     if (nextAiModelAliyun) onAiModelAliyunChange(nextAiModelAliyun);
     if (nextAiSystemPrompt) onAiSystemPromptChange(nextAiSystemPrompt);
     if (nextAiUserPrompt) onAiUserPromptChange(nextAiUserPrompt);
+    if (nextAiUserPromptDefault) onAiUserPromptDefaultChange(nextAiUserPromptDefault);
+    if (nextAiMenuRecipeSystemPrompt) onAiMenuRecipeSystemPromptChange(nextAiMenuRecipeSystemPrompt);
+    if (nextAiMenuRecipePrompt) onAiMenuRecipePromptChange(nextAiMenuRecipePrompt);
+    if (nextAiMenuRecipePromptDefault) onAiMenuRecipePromptDefaultChange(nextAiMenuRecipePromptDefault);
     if (nextAiThinking != null) onAiThinkingChange(nextAiThinking);
     if (nextAiImageBaseUrl) onAiImageBaseUrlChange(nextAiImageBaseUrl);
     if (nextAiImageMode) onAiImageModeChange(nextAiImageMode);
@@ -1155,6 +1193,10 @@ function MinePage({
       aiModelAliyun: nextAiModelAliyun,
       aiSystemPrompt: nextAiSystemPrompt,
       aiUserPrompt: nextAiUserPrompt,
+      aiUserPromptDefault: nextAiUserPromptDefault,
+      aiMenuRecipeSystemPrompt: nextAiMenuRecipeSystemPrompt,
+      aiMenuRecipePrompt: nextAiMenuRecipePrompt,
+      aiMenuRecipePromptDefault: nextAiMenuRecipePromptDefault,
       aiThinking: nextAiThinking,
       aiImageBaseUrl: nextAiImageBaseUrl,
       aiImageMode: nextAiImageMode,
@@ -1201,172 +1243,228 @@ function MinePage({
 
       <div style={{ height: 12 }} />
 
-      <div className="card special-card">
+      <div className="card">
         <div className="cardInner">
-          <div className="recordTitle" style={{ marginBottom: 12 }}>AI 设置</div>
           <div className="stack">
-            <div className="formRow">
-              <div className="label">AI 厂商</div>
-              <div className="segTabs" role="tablist" aria-label="AI 厂商">
-                <button
-                  type="button"
-                  className={`segTab ${aiVendor === "zhipu" ? "segTabActive" : ""}`}
-                  onClick={() => onAiVendorChange("zhipu")}
-                >
-                  智谱
-                </button>
-                <button
-                  type="button"
-                  className={`segTab ${aiVendor === "aliyun" ? "segTabActive" : ""}`}
-                  onClick={() => onAiVendorChange("aliyun")}
-                >
-                  阿里云
-                </button>
-              </div>
-              <div className="hint">用于“拍照问 AI”。可在不同厂商之间切换。</div>
-            </div>
-            <div className="formRow">
-              <div className="label">AI 模型</div>
-              {aiVendor === "zhipu" ? (
-                <div className="segTabs" role="tablist" aria-label="智谱模型">
-                  <button
-                    type="button"
-                    className={`segTab ${aiModelZhipu === "glm-4.6v" ? "segTabActive" : ""}`}
-                    onClick={() => onAiModelZhipuChange("glm-4.6v")}
-                  >
-                    glm-4.6v
-                  </button>
-                  <button
-                    type="button"
-                    className={`segTab ${aiModelZhipu === "glm-4v" ? "segTabActive" : ""}`}
-                    onClick={() => onAiModelZhipuChange("glm-4v")}
-                  >
-                    glm-4v
-                  </button>
+            <details className="details">
+              <summary className="detailsSummary">AI 设置</summary>
+              <div className="detailsBody">
+                <div className="formRow">
+                  <div className="label">AI 厂商</div>
+                  <div className="segTabs" role="tablist" aria-label="AI 厂商">
+                    <button
+                      type="button"
+                      className={`segTab ${aiVendor === "zhipu" ? "segTabActive" : ""}`}
+                      onClick={() => onAiVendorChange("zhipu")}
+                    >
+                      智谱
+                    </button>
+                    <button
+                      type="button"
+                      className={`segTab ${aiVendor === "aliyun" ? "segTabActive" : ""}`}
+                      onClick={() => onAiVendorChange("aliyun")}
+                    >
+                      阿里云
+                    </button>
+                  </div>
+                  <div className="hint">用于“拍照问 AI”。可在不同厂商之间切换。</div>
                 </div>
-              ) : (
-                <div className="segTabs" role="tablist" aria-label="阿里云百炼模型">
-                  <button
-                    type="button"
-                    className={`segTab ${aiModelAliyun === "qwen3.5-plus" ? "segTabActive" : ""}`}
-                    onClick={() => onAiModelAliyunChange("qwen3.5-plus")}
-                  >
-                    qwen3.5-plus
-                  </button>
-                  <button
-                    type="button"
-                    className={`segTab ${aiModelAliyun === "qwen3.5-flash" ? "segTabActive" : ""}`}
-                    onClick={() => onAiModelAliyunChange("qwen3.5-flash")}
-                  >
-                    qwen3.5-flash
-                  </button>
+                <div className="formRow">
+                  <div className="label">AI 模型</div>
+                  {aiVendor === "zhipu" ? (
+                    <div className="segTabs" role="tablist" aria-label="智谱模型">
+                      <button
+                        type="button"
+                        className={`segTab ${aiModelZhipu === "glm-4.6v" ? "segTabActive" : ""}`}
+                        onClick={() => onAiModelZhipuChange("glm-4.6v")}
+                      >
+                        glm-4.6v
+                      </button>
+                      <button
+                        type="button"
+                        className={`segTab ${aiModelZhipu === "glm-4v" ? "segTabActive" : ""}`}
+                        onClick={() => onAiModelZhipuChange("glm-4v")}
+                      >
+                        glm-4v
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="segTabs" role="tablist" aria-label="阿里云百炼模型">
+                      <button
+                        type="button"
+                        className={`segTab ${aiModelAliyun === "qwen3.5-plus" ? "segTabActive" : ""}`}
+                        onClick={() => onAiModelAliyunChange("qwen3.5-plus")}
+                      >
+                        qwen3.5-plus
+                      </button>
+                      <button
+                        type="button"
+                        className={`segTab ${aiModelAliyun === "qwen3.5-flash" ? "segTabActive" : ""}`}
+                        onClick={() => onAiModelAliyunChange("qwen3.5-flash")}
+                      >
+                        qwen3.5-flash
+                      </button>
+                    </div>
+                  )}
+                  <div className="hint">{aiVendor === "zhipu" ? "当前仅展示常用模型。" : "当前仅展示 qwen3.5-plus / qwen3.5-flash。"}</div>
                 </div>
-              )}
-              <div className="hint">{aiVendor === "zhipu" ? "当前仅展示常用模型。" : "当前仅展示 qwen3.5-plus / qwen3.5-flash。"}</div>
-            </div>
-            <div className="formRow">
-              <div className="label">AI System 提示词</div>
-              <textarea
-                className="input"
-                value={aiSystemPrompt}
-                rows={3}
-                placeholder={defaultSystemPrompt}
-                onChange={(e) => onAiSystemPromptChange(e.target.value)}
-                style={{ resize: "vertical" }}
-              />
-              <div className="hint">作为 system 发送给模型，用于设定角色与风格。</div>
-            </div>
-            <div className="formRow">
-              <div className="label">AI 提问描述</div>
-              <textarea
-                className="input"
-                value={aiUserPrompt}
-                rows={6}
-                placeholder={defaultUserPrompt}
-                onChange={(e) => onAiUserPromptChange(e.target.value)}
-                style={{ resize: "vertical" }}
-              />
-              <button
-                className="actionBtn"
-                type="button"
-                onClick={() => {
-                  onAiSystemPromptChange(defaultSystemPrompt);
-                  onAiUserPromptChange(defaultUserPrompt);
-                }}
-                style={{ background: "rgba(255,255,255,0.08)", border: "none" }}
-              >
-                <div style={{ width: "100%", textAlign: "center" }}>
-                  <div className="actionTitle" style={{ fontSize: 13 }}>
-                    恢复默认提示词
+                <div className="promptGroup promptGroupPhoto">
+                  <div className="promptGroupHead">
+                    <div className="promptGroupTitle">拍照识别提示词</div>
+                    <div className="promptGroupTag">拍照问 AI</div>
+                  </div>
+                  <div className="formRow">
+                    <div className="label">系统提示词</div>
+                    <textarea
+                      className="input"
+                      value={aiSystemPrompt}
+                      rows={3}
+                      placeholder={defaultSystemPrompt}
+                      onChange={(e) => onAiSystemPromptChange(e.target.value)}
+                      style={{ resize: "vertical" }}
+                    />
+                  </div>
+                  <div className="formRow">
+                    <div className="label">提问描述提示词</div>
+                    <textarea
+                      className="input"
+                      value={aiUserPrompt}
+                      rows={6}
+                      placeholder={defaultUserPrompt}
+                      onChange={(e) => onAiUserPromptChange(e.target.value)}
+                      style={{ resize: "vertical" }}
+                    />
+                    <div className="promptActionRow">
+                      <button
+                        className="miniBtn promptActionBtn"
+                        type="button"
+                        onClick={() => onAiUserPromptDefaultChange(aiUserPrompt.trim() ? aiUserPrompt : defaultUserPrompt)}
+                      >
+                        设为默认
+                      </button>
+                      <button
+                        className="miniBtn promptActionBtn"
+                        type="button"
+                        onClick={() => onAiUserPromptChange(aiUserPromptDefault || defaultUserPrompt)}
+                      >
+                        恢复默认
+                      </button>
+                    </div>
+                    <div className="hint">当前“恢复默认”会恢复到你设定的默认提问描述。</div>
+                  </div>
+                  <div className="promptSubTitle">图片传参设置（AI 识图）</div>
+                  <div className="formRow">
+                    <div className="label">图片传参方式</div>
+                    <div className="segTabs" role="tablist" aria-label="图片传参方式">
+                      <button
+                        type="button"
+                        className={`segTab ${aiImageMode === "url" ? "segTabActive" : ""}`}
+                        onClick={() => onAiImageModeChange("url")}
+                      >
+                        URL
+                      </button>
+                      <button
+                        type="button"
+                        className={`segTab ${aiImageMode === "inline" ? "segTabActive" : ""}`}
+                        onClick={() => onAiImageModeChange("inline")}
+                      >
+                        Base64
+                      </button>
+                    </div>
+                    <div className="hint">URL 方式更贴近官方文档；仅当大模型可访问该 URL 时才有效。</div>
+                  </div>
+                  <div className="formRow">
+                    <div className="label">图片访问域名</div>
+                    <input
+                      className="input"
+                      type="text"
+                      value={aiImageBaseUrl}
+                      placeholder={origin || "例如：http://192.168.1.10:8081"}
+                      onChange={(e) => onAiImageBaseUrlChange(e.target.value)}
+                    />
+                    <div className="hint">留空则默认使用当前地址：{origin || "-"}</div>
+                  </div>
+                  <div className="formRow">
+                    <div className="label">图片压缩目标</div>
+                    <input
+                      className="input"
+                      type="range"
+                      min={200}
+                      max={1200}
+                      step={50}
+                      value={aiImageTargetKb}
+                      onChange={(e) => onAiImageTargetKbChange(Number(e.target.value))}
+                    />
+                    <div className="hint">当前：{aiImageTargetKb} KB（建议 300–600KB，过低可能影响识别）</div>
                   </div>
                 </div>
-              </button>
-              <div className="hint">作为 user 文本发送给模型（和图片一起）。</div>
-            </div>
-            <div className="formRow">
-              <div className="label">AI Thinking</div>
-              <div className="segTabs" role="tablist" aria-label="AI Thinking">
-                <button
-                  type="button"
-                  className={`segTab ${aiThinking ? "segTabActive" : ""}`}
-                  onClick={() => onAiThinkingChange(true)}
-                >
-                  开
-                </button>
-                <button
-                  type="button"
-                  className={`segTab ${!aiThinking ? "segTabActive" : ""}`}
-                  onClick={() => onAiThinkingChange(false)}
-                >
-                  关
-                </button>
+                <div className="promptGroup promptGroupMenu">
+                  <div className="promptGroupHead">
+                    <div className="promptGroupTitle">推荐菜提示词</div>
+                    <div className="promptGroupTag">每日菜单</div>
+                  </div>
+                  <div className="formRow">
+                    <div className="label">系统提示词</div>
+                    <textarea
+                      className="input"
+                      value={aiMenuRecipeSystemPrompt}
+                      rows={3}
+                      placeholder={defaultMenuRecipeSystemPrompt}
+                      onChange={(e) => onAiMenuRecipeSystemPromptChange(e.target.value)}
+                      style={{ resize: "vertical" }}
+                    />
+                  </div>
+                  <div className="formRow">
+                    <div className="label">提问描述提示词</div>
+                    <textarea
+                      className="input"
+                      value={aiMenuRecipePrompt}
+                      rows={3}
+                      placeholder={defaultMenuRecipePrompt}
+                      onChange={(e) => onAiMenuRecipePromptChange(e.target.value)}
+                      style={{ resize: "vertical" }}
+                    />
+                    <div className="promptActionRow">
+                      <button
+                        className="miniBtn promptActionBtn"
+                        type="button"
+                        onClick={() => onAiMenuRecipePromptDefaultChange(aiMenuRecipePrompt.trim() ? aiMenuRecipePrompt : defaultMenuRecipePrompt)}
+                      >
+                        设为默认
+                      </button>
+                      <button
+                        className="miniBtn promptActionBtn"
+                        type="button"
+                        onClick={() => onAiMenuRecipePromptChange(aiMenuRecipePromptDefault || defaultMenuRecipePrompt)}
+                      >
+                        恢复默认
+                      </button>
+                    </div>
+                    <div className="hint">用于“小工具 &gt; 每日菜单 &gt; 推荐菜”。建议保持简短以减少等待时间。</div>
+                  </div>
+                </div>
+                <div className="formRow">
+                  <div className="label">AI Thinking</div>
+                  <div className="segTabs" role="tablist" aria-label="AI Thinking">
+                    <button
+                      type="button"
+                      className={`segTab ${aiThinking ? "segTabActive" : ""}`}
+                      onClick={() => onAiThinkingChange(true)}
+                    >
+                      开
+                    </button>
+                    <button
+                      type="button"
+                      className={`segTab ${!aiThinking ? "segTabActive" : ""}`}
+                      onClick={() => onAiThinkingChange(false)}
+                    >
+                      关
+                    </button>
+                  </div>
+                  <div className="hint">{aiVendor === "zhipu" ? "关闭可减少等待时间，但回答可能略不稳定。" : "该开关目前仅对智谱生效。"}</div>
+                </div>
               </div>
-              <div className="hint">{aiVendor === "zhipu" ? "关闭可减少等待时间，但回答可能略不稳定。" : "该开关目前仅对智谱生效。"}</div>
-            </div>
-            <div className="formRow">
-              <div className="label">图片传参方式</div>
-              <div className="segTabs" role="tablist" aria-label="图片传参方式">
-                <button
-                  type="button"
-                  className={`segTab ${aiImageMode === "url" ? "segTabActive" : ""}`}
-                  onClick={() => onAiImageModeChange("url")}
-                >
-                  URL
-                </button>
-                <button
-                  type="button"
-                  className={`segTab ${aiImageMode === "inline" ? "segTabActive" : ""}`}
-                  onClick={() => onAiImageModeChange("inline")}
-                >
-                  Base64
-                </button>
-              </div>
-              <div className="hint">URL 方式更贴近官方文档；仅当大模型可访问该 URL 时才有效。</div>
-            </div>
-            <div className="formRow">
-              <div className="label">图片访问域名</div>
-              <input
-                className="input"
-                type="text"
-                value={aiImageBaseUrl}
-                placeholder={origin || "例如：http://192.168.1.10:8081"}
-                onChange={(e) => onAiImageBaseUrlChange(e.target.value)}
-              />
-              <div className="hint">留空则默认使用当前地址：{origin || "-"}</div>
-            </div>
-            <div className="formRow">
-              <div className="label">图片压缩目标</div>
-              <input
-                className="input"
-                type="range"
-                min={200}
-                max={1200}
-                step={50}
-                value={aiImageTargetKb}
-                onChange={(e) => onAiImageTargetKbChange(Number(e.target.value))}
-              />
-              <div className="hint">当前：{aiImageTargetKb} KB（建议 300–600KB，过低可能影响识别）</div>
-            </div>
+            </details>
           </div>
         </div>
       </div>
@@ -1490,6 +1588,8 @@ function WidgetsPage({
   aiModelAliyun,
   aiSystemPrompt,
   aiUserPrompt,
+  aiMenuRecipeSystemPrompt,
+  aiMenuRecipePrompt,
   aiThinking,
   aiImageBaseUrl,
   aiImageMode,
@@ -1500,6 +1600,8 @@ function WidgetsPage({
   aiModelAliyun: string;
   aiSystemPrompt: string;
   aiUserPrompt: string;
+  aiMenuRecipeSystemPrompt: string;
+  aiMenuRecipePrompt: string;
   aiThinking: boolean;
   aiImageBaseUrl: string;
   aiImageMode: "url" | "inline";
@@ -1516,6 +1618,15 @@ function WidgetsPage({
   const [foodProgress, setFoodProgress] = useState(0);
   const [foodElapsedSec, setFoodElapsedSec] = useState(0);
   const [foodFileSize, setFoodFileSize] = useState<number | null>(null);
+  const [menuData, setMenuData] = useState<DailyMenuResponse | null>(null);
+  const [menuLoading, setMenuLoading] = useState(false);
+  const [menuError, setMenuError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuRecipeByKey, setMenuRecipeByKey] = useState<Record<string, string>>({});
+  const [menuRecipeErrorByKey, setMenuRecipeErrorByKey] = useState<Record<string, string>>({});
+  const [menuRecipeBusyKey, setMenuRecipeBusyKey] = useState<string | null>(null);
+  const menuRecipeStreamTokenRef = useRef(0);
+  const menuRecipeReqAbortRef = useRef<AbortController | null>(null);
 
   const fmt = (n: number | null | undefined, digits?: number | null) => {
     if (n == null || !Number.isFinite(n)) return "-";
@@ -1545,6 +1656,27 @@ function WidgetsPage({
     return (bytes / 1024 / 1024).toFixed(2) + " MB";
   };
 
+  const toYmd = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const shiftYmd = (ymd: string, offsetDays: number) => {
+    const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return ymd;
+    const y = Number(m[1]);
+    const mm = Number(m[2]);
+    const dd = Number(m[3]);
+    const base = new Date(Date.UTC(y, mm - 1, dd));
+    base.setUTCDate(base.getUTCDate() + offsetDays);
+    return `${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, "0")}-${String(base.getUTCDate()).padStart(2, "0")}`;
+  };
+
+  const menuToday = useMemo(() => toYmd(new Date()), []);
+  const [menuDate, setMenuDate] = useState<string>(() => menuToday);
+
   const [open, setOpen] = useState(false);
 
   async function load(force: boolean) {
@@ -1567,6 +1699,27 @@ function WidgetsPage({
       void load(false);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const ac = new AbortController();
+    setMenuLoading(true);
+    setMenuError(null);
+    fetchDailyMenu({ date: menuDate, today: menuToday, signal: ac.signal })
+      .then((res) => {
+        setMenuData(res);
+      })
+      .catch((err: any) => {
+        if (err?.name === "AbortError") return;
+        setMenuError(err?.message ?? "获取菜单失败");
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) {
+          setMenuLoading(false);
+        }
+      });
+    return () => ac.abort();
+  }, [menuDate, menuToday, menuOpen]);
 
   useEffect(() => {
     if (!foodBusy) {
@@ -1790,12 +1943,224 @@ function WidgetsPage({
     }
   }
 
+  useEffect(() => {
+    return () => {
+      menuRecipeStreamTokenRef.current += 1;
+      if (menuRecipeReqAbortRef.current) {
+        menuRecipeReqAbortRef.current.abort();
+        menuRecipeReqAbortRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    menuRecipeStreamTokenRef.current += 1;
+    if (menuRecipeReqAbortRef.current) {
+      menuRecipeReqAbortRef.current.abort();
+      menuRecipeReqAbortRef.current = null;
+    }
+    setMenuRecipeBusyKey(null);
+  }, [menuDate]);
+
+  async function onMenuRecipeAsk(item: DailyMenuMeal, key: string) {
+    if (!menuData) return;
+    if (menuRecipeReqAbortRef.current) {
+      menuRecipeReqAbortRef.current.abort();
+      menuRecipeReqAbortRef.current = null;
+    }
+    const ac = new AbortController();
+    menuRecipeReqAbortRef.current = ac;
+    const streamToken = Date.now();
+    menuRecipeStreamTokenRef.current = streamToken;
+    setMenuRecipeBusyKey(key);
+    setMenuRecipeErrorByKey((prev) => ({ ...prev, [key]: "" }));
+    setMenuRecipeByKey((prev) => ({ ...prev, [key]: "" }));
+
+    try {
+      const model = aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu;
+      const ans = await suggestMenuRecipe(
+        {
+          meal: item.meal || "",
+          food: item.food || "",
+          date: menuData.selectedDate,
+          weekday: menuData.weekday,
+          weekNo: menuData.weekNo,
+          vendor: aiVendor,
+          model,
+          thinking: false,
+          systemPrompt: aiMenuRecipeSystemPrompt,
+          menuPrompt: aiMenuRecipePrompt
+        },
+        { signal: ac.signal }
+      );
+      const full = String(ans?.content ?? "").trim();
+      if (!full) throw new Error("AI 未返回内容");
+      const chars = [...full];
+      let i = 0;
+      while (i < chars.length) {
+        if (menuRecipeStreamTokenRef.current !== streamToken) return;
+        const next = Math.min(chars.length, i + (chars.length > 200 ? 4 : 2));
+        const piece = chars.slice(0, next).join("");
+        setMenuRecipeByKey((prev) => ({ ...prev, [key]: piece }));
+        i = next;
+        await new Promise((r) => window.setTimeout(r, 18));
+      }
+      void postClientLog({
+        event: "menu_recipe_ok",
+        level: "info",
+        data: { vendor: aiVendor, model, meal: item.meal, date: menuData.selectedDate, weekNo: menuData.weekNo }
+      });
+    } catch (err: any) {
+      if (err?.name === "AbortError") return;
+      const raw = String(err?.message ?? "");
+      const msg = /aborted|timeout|timed out/i.test(raw) ? "请求超时，请稍后重试" : raw || "推荐失败";
+      setMenuRecipeErrorByKey((prev) => ({ ...prev, [key]: msg }));
+      void postClientLog({
+        event: "menu_recipe_error",
+        level: "warn",
+        data: { vendor: aiVendor, model: aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu, meal: item.meal, message: msg }
+      });
+    } finally {
+      if (menuRecipeStreamTokenRef.current === streamToken) {
+        setMenuRecipeBusyKey(null);
+      }
+      if (menuRecipeReqAbortRef.current === ac) {
+        menuRecipeReqAbortRef.current = null;
+      }
+    }
+  }
+
+  const resolveMealTone = (meal: string, idx: number): "breakfast" | "lunch" | "dinner" => {
+    const m = String(meal ?? "").replace(/\s+/g, "");
+    if (/(早餐|早加餐|早上加餐|上午加餐|晨加餐|早点|早|晨)/.test(m)) return "breakfast";
+    if (/(午餐|中餐|午加餐|下午加餐|中午|午后|午)/.test(m)) return "lunch";
+    if (/(晚餐|晚加餐|夜加餐|睡前加餐|夜宵|晚间|夜|晚)/.test(m)) return "dinner";
+    if (idx <= 1) return "breakfast";
+    if (idx <= 3) return "lunch";
+    return "dinner";
+  };
+
+  const toneClass: Record<"breakfast" | "lunch" | "dinner", string> = {
+    breakfast: "menuMealBreakfast",
+    lunch: "menuMealLunch",
+    dinner: "menuMealDinner"
+  };
+
   return (
     <div className="page">
       <div className="card">
         <div className="cardInner">
           <div className="recordTitle">小工具</div>
           <div className="recordSub">一些方便的小功能</div>
+        </div>
+      </div>
+      <div style={{ height: 12 }} />
+      <div className="card">
+        <div className="cardInner">
+          <button
+            className="detailsSummary"
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <div style={{ textAlign: "left" }}>
+              <div className="recordTitle">每日菜单</div>
+              <div className="recordSub">来自 16 周食谱，规则：Week1 的周四与今天对齐</div>
+            </div>
+            <div style={{ transform: menuOpen ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}>
+              <Icon name="chev" />
+            </div>
+          </button>
+
+          {menuOpen ? (
+            <div className="stack" style={{ marginTop: 12 }}>
+              <div className="menuToolbar">
+                <button className="miniBtn" type="button" onClick={() => setMenuDate((v) => shiftYmd(v, -1))} disabled={menuLoading}>
+                  前一天
+                </button>
+                <input
+                  className="menuDateInput"
+                  type="date"
+                  value={menuDate}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v) setMenuDate(v);
+                  }}
+                />
+                <button className="miniBtn" type="button" onClick={() => setMenuDate((v) => shiftYmd(v, 1))} disabled={menuLoading}>
+                  后一天
+                </button>
+                <button className="miniBtn" type="button" onClick={() => setMenuDate(menuToday)} disabled={menuLoading}>
+                  回到今天
+                </button>
+              </div>
+
+              {menuLoading ? <div className="recordSub">菜单加载中…</div> : null}
+              {menuError ? <div className="errorText">{menuError}</div> : null}
+
+              {menuData ? (
+                <div className="stack">
+                  <div className="recordSub">
+                    {menuData.selectedDate} · Week{menuData.weekNo} · {menuData.weekday}
+                  </div>
+                  <div className="recordSub">{menuData.weekTitle}</div>
+                  {menuData.items.length ? (
+                    <div className="menuMealList">
+                      {menuData.items.map((it: DailyMenuMeal, idx: number) => {
+                        const tone = resolveMealTone(it.meal || "", idx);
+                        return (
+                          <div className={`menuMealItem ${toneClass[tone]}`} key={`${it.meal || "meal"}-${idx}`}>
+                            <div className="menuMealHead">
+                              <div className="menuMealName">{it.meal || `餐次${idx + 1}`}</div>
+                              <div className="menuMealKcal">{it.kcal ? `${it.kcal} kcal` : "-"}</div>
+                            </div>
+                            <div className="menuMealFood">{it.food || "-"}</div>
+                            <div className="menuMealMeta">
+                              生重 {it.rawWeightGram || "-"}g · 碳水 {it.carbsGram || "-"}g · 蛋白 {it.proteinGram || "-"}g · 脂肪{" "}
+                              {it.fatGram || "-"}g
+                            </div>
+                            {it.eatOrderTip ? <div className="menuTip">{it.eatOrderTip}</div> : null}
+                            {(() => {
+                              const key = `${menuData.selectedDate}-${idx}`;
+                              const busy = menuRecipeBusyKey === key;
+                              const text = menuRecipeByKey[key] ?? "";
+                              const err = menuRecipeErrorByKey[key] ?? "";
+                              return (
+                                <div className="menuAiBox">
+                                  <button
+                                    className="miniBtn menuAiBtn"
+                                    type="button"
+                                    onClick={() => void onMenuRecipeAsk(it, key)}
+                                    disabled={busy}
+                                  >
+                                    {busy ? (
+                                      <span className="menuAiBtnBusy">
+                                        推荐菜
+                                        <span className="loadingDots" aria-hidden="true">
+                                          <span className="dot">.</span>
+                                          <span className="dot">.</span>
+                                          <span className="dot">.</span>
+                                        </span>
+                                      </span>
+                                    ) : (
+                                      "推荐菜"
+                                    )}
+                                  </button>
+                                  {err ? <div className="errorText">{err}</div> : null}
+                                  {text ? <div className="menuAiText">{text}</div> : null}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="recordSub">该日期暂无菜单数据</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
       <div style={{ height: 12 }} />
@@ -1850,7 +2215,7 @@ function WidgetsPage({
                       <div>分析中…</div>
                       <div>{Math.min(99, Math.round(foodProgress * 100))}% · {Math.min(99, foodElapsedSec)}s{foodFileSize ? ` · ${formatFileSize(foodFileSize)}` : ""}</div>
                     </div>
-                    <div style={{ height: 10, borderRadius: 999, background: "rgba(255,255,255,0.10)", overflow: "hidden" }}>
+                    <div style={{ height: 10, borderRadius: 999, background: "var(--glass-2)", overflow: "hidden" }}>
                       <div
                         style={{
                           height: "100%",
@@ -1885,7 +2250,7 @@ function WidgetsPage({
                 </div>
 
                 {!foodBusy && foodFileSize ? (
-                   <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)", textAlign: "center" }}>
+                   <div style={{ fontSize: 12, color: "var(--muted)", textAlign: "center" }}>
                      图片已处理 ({formatFileSize(foodFileSize)})
                    </div>
                 ) : null}
@@ -1895,7 +2260,7 @@ function WidgetsPage({
                     <button
                       className="actionBtn"
                       type="button"
-                      style={{ background: "rgba(255,255,255,0.1)", border: "none" }}
+                      style={{ background: "var(--glass-2)", border: "none" }}
                       onClick={() => {
                         setFoodPreview(null);
                         setFoodFile(null);
@@ -1906,7 +2271,7 @@ function WidgetsPage({
                       disabled={foodBusy}
                     >
                       <div style={{ textAlign: "center", width: "100%" }}>
-                        <div className="actionTitle" style={{ color: "rgba(255,255,255,0.8)" }}>重选</div>
+                        <div className="actionTitle" style={{ color: "var(--text)" }}>重选</div>
                       </div>
                     </button>
                     <button
@@ -1936,7 +2301,7 @@ function WidgetsPage({
 
             {foodAnswer ? (
               <div className="stack">
-                <div className="card" style={{ background: "rgba(255,255,255,0.04)" }}>
+                <div className="card" style={{ background: "var(--glass-1)" }}>
                   <div className="cardInner">
                     <div className="recordSub" style={{ marginBottom: 8 }}>
                       模型：{foodAnswer.model}
@@ -1947,7 +2312,7 @@ function WidgetsPage({
                 <button
                   className="actionBtn"
                   type="button"
-                  style={{ background: "rgba(255,255,255,0.08)", border: "none", marginTop: 8 }}
+                  style={{ background: "var(--glass-2)", border: "none", marginTop: 8 }}
                   onClick={() => {
                     setFoodPreview(null);
                     setFoodFile(null);
@@ -2080,6 +2445,10 @@ export function App() {
   const [aiModelAliyun, setAiModelAliyun] = useState<string>(() => initialState.aiModelAliyun);
   const [aiSystemPrompt, setAiSystemPrompt] = useState<string>(() => initialState.aiSystemPrompt);
   const [aiUserPrompt, setAiUserPrompt] = useState<string>(() => initialState.aiUserPrompt);
+  const [aiUserPromptDefault, setAiUserPromptDefault] = useState<string>(() => initialState.aiUserPromptDefault);
+  const [aiMenuRecipeSystemPrompt, setAiMenuRecipeSystemPrompt] = useState<string>(() => initialState.aiMenuRecipeSystemPrompt);
+  const [aiMenuRecipePrompt, setAiMenuRecipePrompt] = useState<string>(() => initialState.aiMenuRecipePrompt);
+  const [aiMenuRecipePromptDefault, setAiMenuRecipePromptDefault] = useState<string>(() => initialState.aiMenuRecipePromptDefault);
   const [aiThinking, setAiThinking] = useState<boolean>(() => initialState.aiThinking);
   const [aiImageBaseUrl, setAiImageBaseUrl] = useState<string>(() => initialState.aiImageBaseUrl);
   const [aiImageMode, setAiImageMode] = useState<"url" | "inline">(() => initialState.aiImageMode);
@@ -2159,6 +2528,22 @@ export function App() {
             typeof (remote as any)?.aiUserPrompt === "string" && String((remote as any).aiUserPrompt).trim()
               ? String((remote as any).aiUserPrompt).trim().slice(0, 4000)
               : initialState.aiUserPrompt;
+          const remoteAiUserPromptDefault =
+            typeof (remote as any)?.aiUserPromptDefault === "string" && String((remote as any).aiUserPromptDefault).trim()
+              ? String((remote as any).aiUserPromptDefault).trim().slice(0, 4000)
+              : initialState.aiUserPromptDefault;
+          const remoteAiMenuRecipeSystemPrompt =
+            typeof (remote as any)?.aiMenuRecipeSystemPrompt === "string" && String((remote as any).aiMenuRecipeSystemPrompt).trim()
+              ? String((remote as any).aiMenuRecipeSystemPrompt).trim().slice(0, 600)
+              : initialState.aiMenuRecipeSystemPrompt;
+          const remoteAiMenuRecipePrompt =
+            typeof (remote as any)?.aiMenuRecipePrompt === "string" && String((remote as any).aiMenuRecipePrompt).trim()
+              ? String((remote as any).aiMenuRecipePrompt).trim().slice(0, 600)
+              : initialState.aiMenuRecipePrompt;
+          const remoteAiMenuRecipePromptDefault =
+            typeof (remote as any)?.aiMenuRecipePromptDefault === "string" && String((remote as any).aiMenuRecipePromptDefault).trim()
+              ? String((remote as any).aiMenuRecipePromptDefault).trim().slice(0, 600)
+              : initialState.aiMenuRecipePromptDefault;
           const remoteAiThinking = typeof (remote as any)?.aiThinking === "boolean" ? remote.aiThinking : initialState.aiThinking;
           const remoteAiImageBaseUrl =
             typeof (remote as any)?.aiImageBaseUrl === "string" && remote.aiImageBaseUrl.trim()
@@ -2178,6 +2563,10 @@ export function App() {
           setAiModelAliyun(remoteAiModelAliyun);
           setAiSystemPrompt(remoteAiSystemPrompt);
           setAiUserPrompt(remoteAiUserPrompt);
+          setAiUserPromptDefault(remoteAiUserPromptDefault);
+          setAiMenuRecipeSystemPrompt(remoteAiMenuRecipeSystemPrompt);
+          setAiMenuRecipePrompt(remoteAiMenuRecipePrompt);
+          setAiMenuRecipePromptDefault(remoteAiMenuRecipePromptDefault);
           setAiThinking(remoteAiThinking);
           setAiImageBaseUrl(remoteAiImageBaseUrl);
           setAiImageMode(remoteAiImageMode);
@@ -2195,6 +2584,10 @@ export function App() {
               aiModelAliyun,
               aiSystemPrompt,
               aiUserPrompt,
+              aiUserPromptDefault,
+              aiMenuRecipeSystemPrompt,
+              aiMenuRecipePrompt,
+              aiMenuRecipePromptDefault,
               aiThinking,
               aiImageBaseUrl,
               aiImageMode,
@@ -2222,6 +2615,10 @@ export function App() {
         aiModelAliyun,
         aiSystemPrompt,
         aiUserPrompt,
+        aiUserPromptDefault,
+        aiMenuRecipeSystemPrompt,
+        aiMenuRecipePrompt,
+        aiMenuRecipePromptDefault,
         aiThinking,
         aiImageBaseUrl,
         aiImageMode,
@@ -2242,6 +2639,10 @@ export function App() {
       aiModelAliyun,
       aiSystemPrompt,
       aiUserPrompt,
+      aiUserPromptDefault,
+      aiMenuRecipeSystemPrompt,
+      aiMenuRecipePrompt,
+      aiMenuRecipePromptDefault,
       aiThinking,
       aiImageBaseUrl,
       aiImageMode,
@@ -2261,6 +2662,10 @@ export function App() {
           aiModelAliyun,
           aiSystemPrompt,
           aiUserPrompt,
+          aiUserPromptDefault,
+          aiMenuRecipeSystemPrompt,
+          aiMenuRecipePrompt,
+          aiMenuRecipePromptDefault,
           aiThinking,
           aiImageBaseUrl,
           aiImageMode,
@@ -2284,6 +2689,10 @@ export function App() {
     aiModelAliyun,
     aiSystemPrompt,
     aiUserPrompt,
+    aiUserPromptDefault,
+    aiMenuRecipeSystemPrompt,
+    aiMenuRecipePrompt,
+    aiMenuRecipePromptDefault,
     aiThinking,
     aiImageBaseUrl,
     aiImageMode,
@@ -2323,6 +2732,12 @@ export function App() {
     setAiUserPrompt(
       "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。"
     );
+    setAiUserPromptDefault(
+      "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。"
+    );
+    setAiMenuRecipeSystemPrompt("你是一个孕妇饮食助手，简短输出菜名与配菜。");
+    setAiMenuRecipePrompt("根据当前食材为孕妇推荐1-3道菜，补充所需食材");
+    setAiMenuRecipePromptDefault("根据当前食材为孕妇推荐1-3道菜，补充所需食材");
     setAiThinking(true);
     setAiImageBaseUrl(window.location.origin);
     setAiImageMode("url");
@@ -2339,6 +2754,11 @@ export function App() {
       aiSystemPrompt: "你是一个孕妇营养专家",
       aiUserPrompt:
         "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+      aiUserPromptDefault:
+        "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+      aiMenuRecipeSystemPrompt: "你是一个孕妇饮食助手，简短输出菜名与配菜。",
+      aiMenuRecipePrompt: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
+      aiMenuRecipePromptDefault: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
       aiThinking: true,
       aiImageBaseUrl: window.location.origin,
       aiImageMode: "url",
@@ -2356,6 +2776,11 @@ export function App() {
       aiSystemPrompt: "你是一个孕妇营养专家",
       aiUserPrompt:
         "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+      aiUserPromptDefault:
+        "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
+      aiMenuRecipeSystemPrompt: "你是一个孕妇饮食助手，简短输出菜名与配菜。",
+      aiMenuRecipePrompt: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
+      aiMenuRecipePromptDefault: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
       aiThinking: true,
       aiImageBaseUrl: window.location.origin,
       aiImageMode: "url",
@@ -2376,6 +2801,10 @@ export function App() {
     aiModelAliyun?: string;
     aiSystemPrompt?: string;
     aiUserPrompt?: string;
+    aiUserPromptDefault?: string;
+    aiMenuRecipeSystemPrompt?: string;
+    aiMenuRecipePrompt?: string;
+    aiMenuRecipePromptDefault?: string;
     aiThinking?: boolean;
     aiImageBaseUrl?: string;
     aiImageMode?: "url" | "inline";
@@ -2395,6 +2824,22 @@ export function App() {
       typeof payload.aiSystemPrompt === "string" && payload.aiSystemPrompt.trim() ? payload.aiSystemPrompt.trim().slice(0, 600) : aiSystemPrompt;
     const nextAiUserPrompt =
       typeof payload.aiUserPrompt === "string" && payload.aiUserPrompt.trim() ? payload.aiUserPrompt.trim().slice(0, 4000) : aiUserPrompt;
+    const nextAiUserPromptDefault =
+      typeof payload.aiUserPromptDefault === "string" && payload.aiUserPromptDefault.trim()
+        ? payload.aiUserPromptDefault.trim().slice(0, 4000)
+        : aiUserPromptDefault;
+    const nextAiMenuRecipeSystemPrompt =
+      typeof payload.aiMenuRecipeSystemPrompt === "string" && payload.aiMenuRecipeSystemPrompt.trim()
+        ? payload.aiMenuRecipeSystemPrompt.trim().slice(0, 600)
+        : aiMenuRecipeSystemPrompt;
+    const nextAiMenuRecipePrompt =
+      typeof payload.aiMenuRecipePrompt === "string" && payload.aiMenuRecipePrompt.trim()
+        ? payload.aiMenuRecipePrompt.trim().slice(0, 600)
+        : aiMenuRecipePrompt;
+    const nextAiMenuRecipePromptDefault =
+      typeof payload.aiMenuRecipePromptDefault === "string" && payload.aiMenuRecipePromptDefault.trim()
+        ? payload.aiMenuRecipePromptDefault.trim().slice(0, 600)
+        : aiMenuRecipePromptDefault;
     const nextAiThinking = typeof payload.aiThinking === "boolean" ? payload.aiThinking : aiThinking;
     const nextAiImageBaseUrl =
       typeof payload.aiImageBaseUrl === "string" && payload.aiImageBaseUrl.trim()
@@ -2416,6 +2861,10 @@ export function App() {
     setAiModelAliyun(nextAiModelAliyun);
     setAiSystemPrompt(nextAiSystemPrompt);
     setAiUserPrompt(nextAiUserPrompt);
+    setAiUserPromptDefault(nextAiUserPromptDefault);
+    setAiMenuRecipeSystemPrompt(nextAiMenuRecipeSystemPrompt);
+    setAiMenuRecipePrompt(nextAiMenuRecipePrompt);
+    setAiMenuRecipePromptDefault(nextAiMenuRecipePromptDefault);
     setAiThinking(nextAiThinking);
     setAiImageBaseUrl(nextAiImageBaseUrl);
     setAiImageMode(nextAiImageMode);
@@ -2431,6 +2880,10 @@ export function App() {
       aiModelAliyun: nextAiModelAliyun,
       aiSystemPrompt: nextAiSystemPrompt,
       aiUserPrompt: nextAiUserPrompt,
+      aiUserPromptDefault: nextAiUserPromptDefault,
+      aiMenuRecipeSystemPrompt: nextAiMenuRecipeSystemPrompt,
+      aiMenuRecipePrompt: nextAiMenuRecipePrompt,
+      aiMenuRecipePromptDefault: nextAiMenuRecipePromptDefault,
       aiThinking: nextAiThinking,
       aiImageBaseUrl: nextAiImageBaseUrl,
       aiImageMode: nextAiImageMode,
@@ -2447,6 +2900,10 @@ export function App() {
       aiModelAliyun: nextAiModelAliyun,
       aiSystemPrompt: nextAiSystemPrompt,
       aiUserPrompt: nextAiUserPrompt,
+      aiUserPromptDefault: nextAiUserPromptDefault,
+      aiMenuRecipeSystemPrompt: nextAiMenuRecipeSystemPrompt,
+      aiMenuRecipePrompt: nextAiMenuRecipePrompt,
+      aiMenuRecipePromptDefault: nextAiMenuRecipePromptDefault,
       aiThinking: nextAiThinking,
       aiImageBaseUrl: nextAiImageBaseUrl,
       aiImageMode: nextAiImageMode,
@@ -2563,6 +3020,8 @@ export function App() {
           aiModelAliyun={aiModelAliyun}
           aiSystemPrompt={aiSystemPrompt}
           aiUserPrompt={aiUserPrompt}
+          aiMenuRecipeSystemPrompt={aiMenuRecipeSystemPrompt}
+          aiMenuRecipePrompt={aiMenuRecipePrompt}
           aiThinking={aiThinking}
           aiImageBaseUrl={aiImageBaseUrl}
           aiImageMode={aiImageMode}
@@ -2589,6 +3048,14 @@ export function App() {
           onAiSystemPromptChange={(v) => setAiSystemPrompt(v.replace(/\r\n/g, "\n").slice(0, 600))}
           aiUserPrompt={aiUserPrompt}
           onAiUserPromptChange={(v) => setAiUserPrompt(v.replace(/\r\n/g, "\n").slice(0, 4000))}
+          aiUserPromptDefault={aiUserPromptDefault}
+          onAiUserPromptDefaultChange={(v) => setAiUserPromptDefault(v.replace(/\r\n/g, "\n").slice(0, 4000))}
+          aiMenuRecipeSystemPrompt={aiMenuRecipeSystemPrompt}
+          onAiMenuRecipeSystemPromptChange={(v) => setAiMenuRecipeSystemPrompt(v.replace(/\r\n/g, "\n").slice(0, 600))}
+          aiMenuRecipePrompt={aiMenuRecipePrompt}
+          aiMenuRecipePromptDefault={aiMenuRecipePromptDefault}
+          onAiMenuRecipePromptChange={(v) => setAiMenuRecipePrompt(v.replace(/\r\n/g, "\n").slice(0, 600))}
+          onAiMenuRecipePromptDefaultChange={(v) => setAiMenuRecipePromptDefault(v.replace(/\r\n/g, "\n").slice(0, 600))}
           aiThinking={aiThinking}
           onAiThinkingChange={setAiThinking}
           aiImageBaseUrl={aiImageBaseUrl}

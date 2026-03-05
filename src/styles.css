@@ -1237,6 +1237,204 @@ button {
   gap: 12px;
 }
 
+.menuToolbar {
+  display: grid;
+  grid-template-columns: 1fr minmax(120px, 1.4fr) 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.miniBtn {
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.menuDateInput {
+  min-height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  padding: 0 10px;
+  width: 100%;
+}
+
+.menuMealList {
+  display: grid;
+  gap: 8px;
+}
+
+.menuMealItem {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 10px;
+}
+
+.menuMealBreakfast {
+  border-color: rgba(56, 189, 248, 0.42);
+  background: linear-gradient(160deg, rgba(56, 189, 248, 0.16) 0%, rgba(255, 255, 255, 0.04) 70%);
+}
+
+.menuMealLunch {
+  border-color: rgba(34, 197, 94, 0.42);
+  background: linear-gradient(160deg, rgba(34, 197, 94, 0.15) 0%, rgba(255, 255, 255, 0.04) 70%);
+}
+
+.menuMealDinner {
+  border-color: rgba(251, 146, 60, 0.42);
+  background: linear-gradient(160deg, rgba(251, 146, 60, 0.16) 0%, rgba(255, 255, 255, 0.04) 70%);
+}
+
+.menuMealBreakfast .menuMealName {
+  color: rgba(186, 230, 253, 0.96);
+}
+
+.menuMealLunch .menuMealName {
+  color: rgba(187, 247, 208, 0.96);
+}
+
+.menuMealDinner .menuMealName {
+  color: rgba(254, 215, 170, 0.96);
+}
+
+.menuMealHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.menuMealName {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.menuMealKcal {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.menuMealFood {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.menuMealMeta {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+:root[data-theme="light"] .menuMealBreakfast {
+  border-color: rgba(2, 132, 199, 0.28);
+  background: linear-gradient(160deg, rgba(2, 132, 199, 0.13) 0%, rgba(0, 0, 0, 0.02) 70%);
+}
+
+:root[data-theme="light"] .menuMealLunch {
+  border-color: rgba(22, 163, 74, 0.28);
+  background: linear-gradient(160deg, rgba(22, 163, 74, 0.12) 0%, rgba(0, 0, 0, 0.02) 70%);
+}
+
+:root[data-theme="light"] .menuMealDinner {
+  border-color: rgba(234, 88, 12, 0.28);
+  background: linear-gradient(160deg, rgba(234, 88, 12, 0.12) 0%, rgba(0, 0, 0, 0.02) 70%);
+}
+
+:root[data-theme="light"] .menuMealBreakfast .menuMealName,
+:root[data-theme="light"] .menuMealLunch .menuMealName,
+:root[data-theme="light"] .menuMealDinner .menuMealName {
+  color: rgba(0, 0, 0, 0.82);
+}
+
+.menuTip {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 4px 8px;
+}
+
+.menuAiBox {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.menuAiBtn {
+  justify-self: start;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.menuAiBtnBusy {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.loadingDots {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 16px;
+}
+
+.loadingDots .dot {
+  opacity: 0.2;
+  animation: menu-dot-blink 1s infinite;
+}
+
+.loadingDots .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.loadingDots .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes menu-dot-blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+.menuAiText {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 420px) {
+  .menuToolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .menuDateInput {
+    grid-column: 1 / -1;
+    order: -1;
+  }
+}
+
 .formRow {
   display: grid;
   gap: 6px;
@@ -1267,6 +1465,65 @@ button {
   gap: 12px;
 }
 
+.promptGroup {
+  display: grid;
+  gap: 10px;
+  border-radius: 16px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.promptGroupPhoto {
+  background: linear-gradient(160deg, rgba(56, 189, 248, 0.16) 0%, rgba(255, 255, 255, 0.04) 64%);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.promptGroupMenu {
+  background: linear-gradient(160deg, rgba(251, 146, 60, 0.16) 0%, rgba(255, 255, 255, 0.04) 64%);
+  border-color: rgba(251, 146, 60, 0.35);
+}
+
+.promptGroupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.promptGroupTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.promptGroupTag {
+  font-size: 11px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.promptSubTitle {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.promptActionRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.promptActionBtn {
+  width: 100%;
+  min-height: 36px;
+}
+
 .label {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.74);
@@ -1290,6 +1547,30 @@ button {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.66);
   line-height: 1.5;
+}
+
+:root[data-theme="light"] .promptGroupPhoto {
+  background: linear-gradient(160deg, rgba(2, 132, 199, 0.12) 0%, rgba(0, 0, 0, 0.02) 64%);
+  border-color: rgba(2, 132, 199, 0.28);
+}
+
+:root[data-theme="light"] .promptGroupMenu {
+  background: linear-gradient(160deg, rgba(234, 88, 12, 0.12) 0%, rgba(0, 0, 0, 0.02) 64%);
+  border-color: rgba(234, 88, 12, 0.28);
+}
+
+:root[data-theme="light"] .promptGroupTitle {
+  color: rgba(0, 0, 0, 0.82);
+}
+
+:root[data-theme="light"] .promptGroupTag {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.72);
+}
+
+:root[data-theme="light"] .promptSubTitle {
+  color: rgba(0, 0, 0, 0.72);
 }
 
 .dangerBtn {
@@ -1369,4 +1650,230 @@ button {
 .special-card .input:focus {
   border-color: rgba(var(--pink-rgb), 0.5);
   box-shadow: 0 0 10px rgba(var(--pink-rgb), 0.25);
+}
+
+/* Light theme readability tuning */
+:root[data-theme="light"] .sectionTitle h2 {
+  color: rgba(0, 0, 0, 0.68);
+}
+
+:root[data-theme="light"] .stageItem {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.035);
+  color: rgba(0, 0, 0, 0.68);
+}
+
+:root[data-theme="light"] .stageItemActive {
+  color: rgba(0, 0, 0, 0.86);
+}
+
+:root[data-theme="light"] .countLabel,
+:root[data-theme="light"] .countUnit,
+:root[data-theme="light"] .countSideLabel {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+:root[data-theme="light"] .countRow {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+:root[data-theme="light"] .countValue {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.84) 0%, rgba(0, 0, 0, 0.64) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+}
+
+:root[data-theme="light"] .countSide {
+  border-left-color: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .countSideValue {
+  color: rgba(0, 0, 0, 0.84);
+}
+
+:root[data-theme="light"] .bigActionBtn {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.2) 55%),
+    linear-gradient(135deg, rgba(var(--pink-rgb), 0.12) 0%, rgba(var(--pink2-rgb), 0.08) 42%, rgba(0, 0, 0, 0.02) 100%);
+}
+
+:root[data-theme="light"] .btnIcon {
+  color: rgba(0, 0, 0, 0.84);
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .btnTitle {
+  color: rgba(0, 0, 0, 0.86);
+}
+
+:root[data-theme="light"] .btnDesc {
+  color: rgba(0, 0, 0, 0.62);
+}
+
+:root[data-theme="light"] .statsStickyBtnOpen,
+:root[data-theme="light"] .hourItem,
+:root[data-theme="light"] .emptyBox {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .hourItem {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+:root[data-theme="light"] .hourLeft,
+:root[data-theme="light"] .hourRight {
+  color: rgba(0, 0, 0, 0.84);
+}
+
+:root[data-theme="light"] .emptyBox {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="light"] .emptySub,
+:root[data-theme="light"] .calNavTitle {
+  color: rgba(0, 0, 0, 0.58);
+}
+
+:root[data-theme="light"] .segTabs,
+:root[data-theme="light"] .calNavBtn,
+:root[data-theme="light"] .miniBtn,
+:root[data-theme="light"] .menuDateInput {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+:root[data-theme="light"] .segTab {
+  color: rgba(0, 0, 0, 0.66);
+}
+
+:root[data-theme="light"] .segTabActive {
+  color: rgba(0, 0, 0, 0.86);
+  border: 1px solid rgba(var(--pink-rgb), 0.24);
+}
+
+:root[data-theme="light"] .drawer {
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme="light"] .fab {
+  box-shadow: 0 12px 30px rgba(var(--pink-rgb), 0.18), 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+:root[data-theme="light"] .bottomNavBar {
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.14);
+}
+
+:root[data-theme="light"] .tabBtn {
+  color: rgba(0, 0, 0, 0.64);
+}
+
+:root[data-theme="light"] .tabBtnActive {
+  color: rgba(0, 0, 0, 0.86);
+  background: rgba(255, 45, 85, 0.12);
+  border-color: rgba(255, 45, 85, 0.24);
+}
+
+:root[data-theme="light"] .sheetOverlay {
+  background: rgba(11, 17, 27, 0.24);
+}
+
+:root[data-theme="light"] .sheet {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="light"] .sheetHeaderTitle {
+  color: rgba(0, 0, 0, 0.72);
+}
+
+:root[data-theme="light"] .actionBtn,
+:root[data-theme="light"] .pickBtn,
+:root[data-theme="light"] .eventChip,
+:root[data-theme="light"] .detailRow,
+:root[data-theme="light"] .priceTable,
+:root[data-theme="light"] .details,
+:root[data-theme="light"] .input,
+:root[data-theme="light"] .dangerBtn,
+:root[data-theme="light"] .menuAiText,
+:root[data-theme="light"] .menuTip {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+:root[data-theme="light"] .menuTip {
+  color: rgba(0, 0, 0, 0.74);
+  border-color: rgba(0, 0, 0, 0.16);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+:root[data-theme="light"] .priceTable thead th {
+  background: rgba(0, 0, 0, 0.03);
+  color: rgba(0, 0, 0, 0.72);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .priceTable tbody td {
+  color: rgba(0, 0, 0, 0.76);
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme="light"] .priceTime,
+:root[data-theme="light"] .priceUnit,
+:root[data-theme="light"] .actionSub,
+:root[data-theme="light"] .menuMealKcal,
+:root[data-theme="light"] .menuMealMeta,
+:root[data-theme="light"] .label,
+:root[data-theme="light"] .hint,
+:root[data-theme="light"] .detailTime,
+:root[data-theme="light"] .eventTime,
+:root[data-theme="light"] .linkBtn {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+:root[data-theme="light"] .eventType,
+:root[data-theme="light"] .detailType,
+:root[data-theme="light"] .detailsSummary {
+  color: rgba(0, 0, 0, 0.84);
+}
+
+:root[data-theme="light"] .input {
+  color: rgba(0, 0, 0, 0.84);
+}
+
+:root[data-theme="light"] .dangerBtn {
+  color: rgba(0, 0, 0, 0.82);
+  border-color: rgba(239, 68, 68, 0.32);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+:root[data-theme="light"] .dangerBtn strong {
+  color: rgba(185, 28, 28, 0.95);
+}
+
+:root[data-theme="light"] .special-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 252, 0.9) 100%);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+:root[data-theme="light"] .special-card .detailsSummary {
+  color: rgba(0, 0, 0, 0.84);
+  text-shadow: none;
+}
+
+:root[data-theme="light"] .special-card .input,
+:root[data-theme="light"] .special-card .segTabs,
+:root[data-theme="light"] .special-card .actionBtn {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: none;
+}
+
+:root[data-theme="light"] .special-card .segTab:hover:not(.segTabActive) {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.78);
 }

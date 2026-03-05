@@ -12,6 +12,10 @@ export type RemoteState = {
   aiModelAliyun: string;
   aiSystemPrompt: string;
   aiUserPrompt: string;
+  aiUserPromptDefault: string;
+  aiMenuRecipeSystemPrompt: string;
+  aiMenuRecipePrompt: string;
+  aiMenuRecipePromptDefault: string;
   aiThinking: boolean;
   aiImageBaseUrl: string;
   aiImageMode: "url" | "inline";
@@ -128,6 +132,82 @@ export async function fetchCngoldPrices(opts?: { force?: boolean; signal?: Abort
   const data = (await res.json()) as CngoldPricesResponse;
   if (!data || typeof data !== "object") throw new Error("bad response");
   return data;
+}
+
+export type DailyMenuMeal = {
+  meal: string;
+  food: string;
+  rawWeightGram: string;
+  carbsGram: string;
+  proteinGram: string;
+  fatGram: string;
+  fiberGram: string;
+  kcal: string;
+  eatOrderTip: string;
+};
+
+export type DailyMenuResponse = {
+  selectedDate: string;
+  anchorDate: string;
+  offsetDays: number;
+  weekNo: number;
+  weekTitle: string;
+  weekday: string;
+  dayIndex: number;
+  cycleIndex: number;
+  totalWeeks: number;
+  totalCycleDays: number;
+  items: DailyMenuMeal[];
+  cachedWorkbook: boolean;
+};
+
+export async function fetchDailyMenu(opts?: { date?: string; today?: string; signal?: AbortSignal }): Promise<DailyMenuResponse> {
+  const qs = new URLSearchParams();
+  if (opts?.date) qs.set("date", opts.date);
+  if (opts?.today) qs.set("today", opts.today);
+  const query = qs.toString();
+  const res = await fetch(`/api/widgets/daily-menu${query ? `?${query}` : ""}`, { method: "GET", signal: opts?.signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = (await res.json()) as DailyMenuResponse;
+  if (!data || typeof data !== "object" || !Array.isArray(data.items)) throw new Error("bad response");
+  return data;
+}
+
+export type MenuRecipeSuggestResponse = {
+  vendor?: "zhipu" | "aliyun";
+  model: string;
+  content: string;
+  requestId?: string;
+};
+
+export async function suggestMenuRecipe(
+  payload: {
+    meal: string;
+    food: string;
+    date?: string;
+    weekday?: string;
+    weekNo?: number;
+    vendor?: "zhipu" | "aliyun";
+    model?: string;
+    thinking?: boolean;
+    systemPrompt?: string;
+    menuPrompt?: string;
+  },
+  opts?: { signal?: AbortSignal }
+): Promise<MenuRecipeSuggestResponse> {
+  const res = await fetch(`/api/widgets/menu-recipe`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: opts?.signal
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) {
+    const rid = typeof data?.requestId === "string" && data.requestId ? ` (request_id: ${data.requestId})` : "";
+    throw new Error(typeof data?.error === "string" ? `${data.error}${rid}` : `HTTP ${res.status}${rid}`);
+  }
+  if (!data || typeof data !== "object") throw new Error("bad response");
+  return data as MenuRecipeSuggestResponse;
 }
 
 export type FoodCheckResponse = {
