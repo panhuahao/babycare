@@ -133,6 +133,26 @@ button {
   gap: 10px;
 }
 
+.topNavActionBtn {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-1);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.topNavActionBtn:disabled {
+  opacity: 0.65;
+}
+
+.topNavActionPlaceholder {
+  width: 74px;
+  height: 32px;
+}
+
 .iconBtn {
   width: 36px;
   height: 36px;
@@ -150,6 +170,7 @@ button {
 .page {
   flex: 1;
   overflow: auto;
+  overscroll-behavior-y: contain;
   min-height: 0;
   -webkit-overflow-scrolling: touch;
   padding: 14px 16px calc(170px + var(--safe-bottom));
@@ -1237,6 +1258,19 @@ button {
   gap: 12px;
 }
 
+.pullRefreshHint {
+  display: grid;
+  place-items: end center;
+  transition: height 140ms ease;
+}
+
+.pullRefreshText {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
 .menuToolbar {
   display: grid;
   grid-template-columns: 1fr minmax(120px, 1.4fr) 1fr 1fr;
@@ -1657,6 +1691,12 @@ button {
   color: rgba(0, 0, 0, 0.68);
 }
 
+:root[data-theme="light"] .topNavActionBtn {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.14);
+  color: rgba(0, 0, 0, 0.8);
+}
+
 :root[data-theme="light"] .stageItem {
   border-color: rgba(0, 0, 0, 0.1);
   background: rgba(0, 0, 0, 0.035);
@@ -1838,6 +1878,13 @@ button {
 :root[data-theme="light"] .detailType,
 :root[data-theme="light"] .detailsSummary {
   color: rgba(0, 0, 0, 0.84);
+}
+
+:root[data-theme="light"] .eventMore {
+  color: rgba(185, 28, 28, 0.96);
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(239, 68, 68, 0.14);
+  font-weight: 700;
 }
 
 :root[data-theme="light"] .input {

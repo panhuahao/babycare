@@ -104,12 +104,31 @@ function Icon({ name }: { name: "calendar" | "bell" | "home" | "chart" | "grid" 
   }
 }
 
-function TopNav({ title }: { title: string }) {
+function TopNav({
+  title,
+  rightActionLabel,
+  onRightAction,
+  rightActionDisabled = false
+}: {
+  title: string;
+  rightActionLabel?: string;
+  onRightAction?: () => void;
+  rightActionDisabled?: boolean;
+}) {
+  const showRightAction = typeof onRightAction === "function" && !!rightActionLabel;
   return (
     <div className="topNav">
       <div className="topNavRow">
         <div className="topTitle">{title}</div>
-        <div style={{ width: 82 }} />
+        <div className="topActions">
+          {showRightAction ? (
+            <button className="topNavActionBtn" type="button" onClick={onRightAction} disabled={rightActionDisabled}>
+              {rightActionLabel}
+            </button>
+          ) : (
+            <div className="topNavActionPlaceholder" aria-hidden="true" />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -202,7 +221,7 @@ function HourRecordRow({
               </div>
             ))}
             {more ? (
-              <button className="eventChip eventMoreBtn" onClick={onOpenDetail} type="button">
+              <button className="eventChip eventMore eventMoreBtn" onClick={onOpenDetail} type="button">
                 +{more}
               </button>
             ) : null}
@@ -407,7 +426,8 @@ function HomePage({
   currentHourClicks,
   bubbleSpeed,
   onQuickAdd,
-  onOpenDetail
+  onOpenDetail,
+  onRefresh
 }: {
   pregnancy: ReturnType<typeof computePregnancy>;
   pregnancyInfo: PregnancyInfo;
@@ -418,14 +438,21 @@ function HomePage({
   bubbleSpeed: number;
   onQuickAdd: (t: MovementType) => void;
   onOpenDetail: (hourStart: number) => void;
+  onRefresh: () => Promise<void> | void;
 }) {
   const top3 = records.filter((r) => r.effectiveCount > 0).slice(0, 3);
+  const pageRef = useRef<HTMLDivElement | null>(null);
   const arenaRef = useRef<HTMLDivElement | null>(null);
   const bubbleRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const animRef = useRef<number | null>(null);
   const seedRef = useRef(20260301);
   const speedRef = useRef(bubbleSpeed);
   const speedPrevRef = useRef(bubbleSpeed);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshBusyRef = useRef(false);
+  const pullStartYRef = useRef<number | null>(null);
+  const pullEnabledRef = useRef(false);
+  const pullDistanceRef = useRef(0);
   const simRef = useRef<{
     w: number;
     h: number;
@@ -442,6 +469,63 @@ function HomePage({
   function rand() {
     seedRef.current = (seedRef.current * 1664525 + 1013904223) >>> 0;
     return seedRef.current / 0xffffffff;
+  }
+
+  const pullThreshold = 46;
+  const pullMax = 92;
+
+  function onPageTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    if (refreshing) return;
+    const y = e.touches?.[0]?.clientY;
+    if (typeof y !== "number") return;
+    pullStartYRef.current = y;
+    pullEnabledRef.current = (pageRef.current?.scrollTop ?? 0) <= 0;
+    pullDistanceRef.current = 0;
+  }
+
+  function onPageTouchMove(e: React.TouchEvent<HTMLDivElement>) {
+    if (refreshing) return;
+    if (!pullEnabledRef.current) return;
+    const startY = pullStartYRef.current;
+    const currentY = e.touches?.[0]?.clientY;
+    if (typeof startY !== "number" || typeof currentY !== "number") return;
+    if ((pageRef.current?.scrollTop ?? 0) > 0) {
+      pullEnabledRef.current = false;
+      return;
+    }
+    const dy = currentY - startY;
+    if (dy <= 0) {
+      pullDistanceRef.current = 0;
+      return;
+    }
+    pullDistanceRef.current = Math.min(pullMax, dy * 0.55);
+  }
+
+  async function triggerRefresh() {
+    if (refreshBusyRef.current) return;
+    refreshBusyRef.current = true;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      refreshBusyRef.current = false;
+      pullDistanceRef.current = 0;
+      setRefreshing(false);
+    }
+  }
+
+  function onPageTouchEnd() {
+    if (refreshBusyRef.current) return;
+    const canPull = pullEnabledRef.current;
+    pullEnabledRef.current = false;
+    pullStartYRef.current = null;
+    if (!canPull) return;
+    const currentPull = pullDistanceRef.current;
+    if (currentPull >= pullThreshold) {
+      void triggerRefresh();
+      return;
+    }
+    pullDistanceRef.current = 0;
   }
 
   useEffect(() => {
@@ -584,7 +668,7 @@ function HomePage({
   }, []);
 
   return (
-    <div className="page">
+    <div className="page" ref={pageRef} onTouchStart={onPageTouchStart} onTouchMove={onPageTouchMove} onTouchEnd={onPageTouchEnd} onTouchCancel={onPageTouchEnd}>
       <div className="card">
         <div className="cardInner">
           <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
@@ -2453,6 +2537,8 @@ export function App() {
   const [aiImageBaseUrl, setAiImageBaseUrl] = useState<string>(() => initialState.aiImageBaseUrl);
   const [aiImageMode, setAiImageMode] = useState<"url" | "inline">(() => initialState.aiImageMode);
   const [aiImageTargetKb, setAiImageTargetKb] = useState<number>(() => initialState.aiImageTargetKb);
+  const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const homeRefreshBusyRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
@@ -2488,90 +2574,134 @@ export function App() {
     return events.filter((e) => e.ts >= start && e.ts <= now).length;
   }, [events]);
 
+  function applyRemoteState(remote: any) {
+    suppressSaveRef.current = true;
+    const remoteEvents = Array.isArray(remote?.events)
+      ? remote.events
+          .filter((e: any) => typeof e?.id === "string" && typeof e?.type === "string" && typeof e?.ts === "number")
+          .slice(0, 2000)
+      : [];
+    const remotePreg =
+      remote?.pregnancyInfo && typeof remote?.pregnancyInfo?.lmpDate === "string" && remote.pregnancyInfo.lmpDate ? remote.pregnancyInfo : fallbackPreg;
+    const remoteBubble =
+      typeof remote?.bubbleSpeed === "number" && Number.isFinite(remote.bubbleSpeed)
+        ? Math.min(1, Math.max(0.2, remote.bubbleSpeed))
+        : initialState.bubbleSpeed;
+    const remoteTheme = remote?.themeMode === "light" || remote?.themeMode === "dark" ? remote.themeMode : initialState.themeMode;
+    const remoteAiVendor = remote?.aiVendor === "zhipu" || remote?.aiVendor === "aliyun" ? remote.aiVendor : initialState.aiVendor;
+    const remoteAiModelZhipu =
+      typeof remote?.aiModelZhipu === "string" && remote.aiModelZhipu.trim()
+        ? remote.aiModelZhipu.trim().slice(0, 64)
+        : typeof remote?.aiModel === "string" && String(remote.aiModel).trim()
+          ? String(remote.aiModel).trim().slice(0, 64)
+          : initialState.aiModelZhipu;
+    const remoteAiModelAliyun =
+      typeof remote?.aiModelAliyun === "string" && remote.aiModelAliyun.trim() ? remote.aiModelAliyun.trim().slice(0, 64) : initialState.aiModelAliyun;
+    const remoteAiSystemPrompt =
+      typeof remote?.aiSystemPrompt === "string" && String(remote.aiSystemPrompt).trim()
+        ? String(remote.aiSystemPrompt).trim().slice(0, 600)
+        : initialState.aiSystemPrompt;
+    const remoteAiUserPrompt =
+      typeof remote?.aiUserPrompt === "string" && String(remote.aiUserPrompt).trim()
+        ? String(remote.aiUserPrompt).trim().slice(0, 4000)
+        : initialState.aiUserPrompt;
+    const remoteAiUserPromptDefault =
+      typeof remote?.aiUserPromptDefault === "string" && String(remote.aiUserPromptDefault).trim()
+        ? String(remote.aiUserPromptDefault).trim().slice(0, 4000)
+        : initialState.aiUserPromptDefault;
+    const remoteAiMenuRecipeSystemPrompt =
+      typeof remote?.aiMenuRecipeSystemPrompt === "string" && String(remote.aiMenuRecipeSystemPrompt).trim()
+        ? String(remote.aiMenuRecipeSystemPrompt).trim().slice(0, 600)
+        : initialState.aiMenuRecipeSystemPrompt;
+    const remoteAiMenuRecipePrompt =
+      typeof remote?.aiMenuRecipePrompt === "string" && String(remote.aiMenuRecipePrompt).trim()
+        ? String(remote.aiMenuRecipePrompt).trim().slice(0, 600)
+        : initialState.aiMenuRecipePrompt;
+    const remoteAiMenuRecipePromptDefault =
+      typeof remote?.aiMenuRecipePromptDefault === "string" && String(remote.aiMenuRecipePromptDefault).trim()
+        ? String(remote.aiMenuRecipePromptDefault).trim().slice(0, 600)
+        : initialState.aiMenuRecipePromptDefault;
+    const remoteAiThinking = typeof remote?.aiThinking === "boolean" ? remote.aiThinking : initialState.aiThinking;
+    const remoteAiImageBaseUrl =
+      typeof remote?.aiImageBaseUrl === "string" && remote.aiImageBaseUrl.trim()
+        ? remote.aiImageBaseUrl.trim().replace(/\/+$/, "").slice(0, 200)
+        : initialState.aiImageBaseUrl;
+    const remoteAiImageMode = remote?.aiImageMode === "url" || remote?.aiImageMode === "inline" ? remote.aiImageMode : initialState.aiImageMode;
+    const remoteAiImageTargetKb =
+      typeof remote?.aiImageTargetKb === "number" && Number.isFinite(remote.aiImageTargetKb)
+        ? Math.min(2000, Math.max(150, Math.round(remote.aiImageTargetKb)))
+        : initialState.aiImageTargetKb;
+
+    setEvents(remoteEvents);
+    setPregnancyInfo(remotePreg);
+    setBubbleSpeed(remoteBubble);
+    setThemeMode(remoteTheme);
+    setAiVendor(remoteAiVendor);
+    setAiModelZhipu(remoteAiModelZhipu);
+    setAiModelAliyun(remoteAiModelAliyun);
+    setAiSystemPrompt(remoteAiSystemPrompt);
+    setAiUserPrompt(remoteAiUserPrompt);
+    setAiUserPromptDefault(remoteAiUserPromptDefault);
+    setAiMenuRecipeSystemPrompt(remoteAiMenuRecipeSystemPrompt);
+    setAiMenuRecipePrompt(remoteAiMenuRecipePrompt);
+    setAiMenuRecipePromptDefault(remoteAiMenuRecipePromptDefault);
+    setAiThinking(remoteAiThinking);
+    setAiImageBaseUrl(remoteAiImageBaseUrl);
+    setAiImageMode(remoteAiImageMode);
+    setAiImageTargetKb(remoteAiImageTargetKb);
+    setUpdatedAt(typeof remote?.updatedAt === "number" ? remote.updatedAt : Date.now());
+  }
+
+  async function refreshHomeData() {
+    if (homeRefreshBusyRef.current) return;
+    homeRefreshBusyRef.current = true;
+    setHomeRefreshing(true);
+    const ac = new AbortController();
+    try {
+      const remote = await fetchState(ac.signal);
+      if (typeof remote?.updatedAt === "number" && remote.updatedAt > updatedAt) {
+        applyRemoteState(remote);
+      } else if (updatedAt > (remote?.updatedAt ?? 0)) {
+        await pushState(
+          {
+            pregnancyInfo,
+            events,
+            bubbleSpeed,
+            themeMode,
+            aiVendor,
+            aiModelZhipu,
+            aiModelAliyun,
+            aiSystemPrompt,
+            aiUserPrompt,
+            aiUserPromptDefault,
+            aiMenuRecipeSystemPrompt,
+            aiMenuRecipePrompt,
+            aiMenuRecipePromptDefault,
+            aiThinking,
+            aiImageBaseUrl,
+            aiImageMode,
+            aiImageTargetKb,
+            updatedAt
+          },
+          ac.signal
+        );
+      }
+    } catch {
+    } finally {
+      suppressSaveRef.current = false;
+      ac.abort();
+      homeRefreshBusyRef.current = false;
+      setHomeRefreshing(false);
+    }
+  }
+
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
       try {
         const remote = await fetchState(ac.signal);
         if (typeof remote?.updatedAt === "number" && remote.updatedAt > updatedAt) {
-          suppressSaveRef.current = true;
-          const remoteEvents = Array.isArray(remote.events)
-            ? remote.events
-                .filter((e: any) => typeof e?.id === "string" && typeof e?.type === "string" && typeof e?.ts === "number")
-                .slice(0, 2000)
-            : [];
-          const remotePreg =
-            remote?.pregnancyInfo && typeof (remote as any).pregnancyInfo?.lmpDate === "string" && (remote as any).pregnancyInfo.lmpDate
-              ? remote.pregnancyInfo
-              : fallbackPreg;
-          const remoteBubble =
-            typeof (remote as any)?.bubbleSpeed === "number" && Number.isFinite((remote as any).bubbleSpeed)
-              ? Math.min(1, Math.max(0.2, (remote as any).bubbleSpeed))
-              : initialState.bubbleSpeed;
-          const remoteTheme = (remote as any)?.themeMode === "light" || (remote as any)?.themeMode === "dark" ? remote.themeMode : initialState.themeMode;
-          const remoteAiVendor = (remote as any)?.aiVendor === "zhipu" || (remote as any)?.aiVendor === "aliyun" ? remote.aiVendor : initialState.aiVendor;
-          const remoteAiModelZhipu =
-            typeof (remote as any)?.aiModelZhipu === "string" && remote.aiModelZhipu.trim()
-              ? remote.aiModelZhipu.trim().slice(0, 64)
-              : typeof (remote as any)?.aiModel === "string" && String((remote as any).aiModel).trim()
-                ? String((remote as any).aiModel).trim().slice(0, 64)
-                : initialState.aiModelZhipu;
-          const remoteAiModelAliyun =
-            typeof (remote as any)?.aiModelAliyun === "string" && remote.aiModelAliyun.trim()
-              ? remote.aiModelAliyun.trim().slice(0, 64)
-              : initialState.aiModelAliyun;
-          const remoteAiSystemPrompt =
-            typeof (remote as any)?.aiSystemPrompt === "string" && String((remote as any).aiSystemPrompt).trim()
-              ? String((remote as any).aiSystemPrompt).trim().slice(0, 600)
-              : initialState.aiSystemPrompt;
-          const remoteAiUserPrompt =
-            typeof (remote as any)?.aiUserPrompt === "string" && String((remote as any).aiUserPrompt).trim()
-              ? String((remote as any).aiUserPrompt).trim().slice(0, 4000)
-              : initialState.aiUserPrompt;
-          const remoteAiUserPromptDefault =
-            typeof (remote as any)?.aiUserPromptDefault === "string" && String((remote as any).aiUserPromptDefault).trim()
-              ? String((remote as any).aiUserPromptDefault).trim().slice(0, 4000)
-              : initialState.aiUserPromptDefault;
-          const remoteAiMenuRecipeSystemPrompt =
-            typeof (remote as any)?.aiMenuRecipeSystemPrompt === "string" && String((remote as any).aiMenuRecipeSystemPrompt).trim()
-              ? String((remote as any).aiMenuRecipeSystemPrompt).trim().slice(0, 600)
-              : initialState.aiMenuRecipeSystemPrompt;
-          const remoteAiMenuRecipePrompt =
-            typeof (remote as any)?.aiMenuRecipePrompt === "string" && String((remote as any).aiMenuRecipePrompt).trim()
-              ? String((remote as any).aiMenuRecipePrompt).trim().slice(0, 600)
-              : initialState.aiMenuRecipePrompt;
-          const remoteAiMenuRecipePromptDefault =
-            typeof (remote as any)?.aiMenuRecipePromptDefault === "string" && String((remote as any).aiMenuRecipePromptDefault).trim()
-              ? String((remote as any).aiMenuRecipePromptDefault).trim().slice(0, 600)
-              : initialState.aiMenuRecipePromptDefault;
-          const remoteAiThinking = typeof (remote as any)?.aiThinking === "boolean" ? remote.aiThinking : initialState.aiThinking;
-          const remoteAiImageBaseUrl =
-            typeof (remote as any)?.aiImageBaseUrl === "string" && remote.aiImageBaseUrl.trim()
-              ? remote.aiImageBaseUrl.trim().replace(/\/+$/, "").slice(0, 200)
-              : initialState.aiImageBaseUrl;
-          const remoteAiImageMode = (remote as any)?.aiImageMode === "url" || (remote as any)?.aiImageMode === "inline" ? remote.aiImageMode : initialState.aiImageMode;
-          const remoteAiImageTargetKb =
-            typeof (remote as any)?.aiImageTargetKb === "number" && Number.isFinite((remote as any).aiImageTargetKb)
-              ? Math.min(2000, Math.max(150, Math.round((remote as any).aiImageTargetKb)))
-              : initialState.aiImageTargetKb;
-          setEvents(remoteEvents);
-          setPregnancyInfo(remotePreg);
-          setBubbleSpeed(remoteBubble);
-          setThemeMode(remoteTheme);
-          setAiVendor(remoteAiVendor);
-          setAiModelZhipu(remoteAiModelZhipu);
-          setAiModelAliyun(remoteAiModelAliyun);
-          setAiSystemPrompt(remoteAiSystemPrompt);
-          setAiUserPrompt(remoteAiUserPrompt);
-          setAiUserPromptDefault(remoteAiUserPromptDefault);
-          setAiMenuRecipeSystemPrompt(remoteAiMenuRecipeSystemPrompt);
-          setAiMenuRecipePrompt(remoteAiMenuRecipePrompt);
-          setAiMenuRecipePromptDefault(remoteAiMenuRecipePromptDefault);
-          setAiThinking(remoteAiThinking);
-          setAiImageBaseUrl(remoteAiImageBaseUrl);
-          setAiImageMode(remoteAiImageMode);
-          setAiImageTargetKb(remoteAiImageTargetKb);
-          setUpdatedAt(remote.updatedAt);
+          applyRemoteState(remote);
         } else if (updatedAt > (remote?.updatedAt ?? 0)) {
           await pushState(
             {
@@ -2990,7 +3120,12 @@ export function App() {
 
   return (
     <div className="appShell">
-      <TopNav title={topTitle} />
+      <TopNav
+        title={topTitle}
+        rightActionLabel={route.name === "home" ? (homeRefreshing ? "刷新中…" : "刷新") : undefined}
+        onRightAction={route.name === "home" ? () => void refreshHomeData() : undefined}
+        rightActionDisabled={route.name === "home" ? homeRefreshing : undefined}
+      />
       {route.name === "home" ? (
         <HomePage
           pregnancy={pregnancy}
@@ -3002,6 +3137,7 @@ export function App() {
           bubbleSpeed={bubbleSpeed}
           onQuickAdd={(t) => addMovement(t)}
           onOpenDetail={(h) => setDetailHour(h)}
+          onRefresh={refreshHomeData}
         />
       ) : route.name === "stats" ? (
         <StatsCalendarPage
