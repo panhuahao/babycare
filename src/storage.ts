@@ -1,8 +1,10 @@
 import { MovementEvent } from "./domain/movement";
 import { PregnancyInfo } from "./domain/pregnancy";
+import { normalizeWeightRecords, WeightRecord } from "./domain/weight";
 
 const KEY_EVENTS = "bbcare:movementEvents:v1";
 const KEY_PREG = "bbcare:pregnancyInfo:v1";
+const KEY_WEIGHTS = "bbcare:weightRecords:v1";
 const KEY_STATE = "bbcare:state:v2";
 const KEY_BUBBLE_SPEED = "bbcare:bubbleSpeed";
 const KEY_THEME_MODE = "bbcare:themeMode";
@@ -29,6 +31,7 @@ const DEFAULT_MENU_RECIPE_PROMPT = "根据当前食材为孕妇推荐1-3道菜�
 export type AppState = {
   pregnancyInfo: PregnancyInfo;
   events: MovementEvent[];
+  weights: WeightRecord[];
   updatedAt: number;
   bubbleSpeed: number;
   themeMode: "dark" | "light";
@@ -88,6 +91,7 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
       const parsed = JSON.parse(raw) as any;
       const pregnancyInfo = normalizePregnancyInfo(parsed?.pregnancyInfo, fallbackPregnancyInfo);
       const events = normalizeEvents(parsed?.events);
+      const weights = normalizeWeightRecords(parsed?.weights);
       const updatedAt = typeof parsed?.updatedAt === "number" ? parsed.updatedAt : 0;
       const bs0 =
         typeof parsed?.bubbleSpeed === "number" && Number.isFinite(parsed.bubbleSpeed)
@@ -116,6 +120,7 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
       return {
         pregnancyInfo,
         events,
+        weights,
         updatedAt,
         bubbleSpeed: bs0 ?? 0.35,
         themeMode: tm0 ?? "dark",
@@ -137,6 +142,7 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
   } catch {}
 
   let events: MovementEvent[] = [];
+  let weights: WeightRecord[] = [];
   let pregnancyInfo: PregnancyInfo = fallbackPregnancyInfo;
   let bubbleSpeed = 0.35;
   let themeMode: "dark" | "light" = "dark";
@@ -161,6 +167,10 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
   try {
     const rawPreg = localStorage.getItem(KEY_PREG);
     if (rawPreg) pregnancyInfo = normalizePregnancyInfo(JSON.parse(rawPreg), fallbackPregnancyInfo);
+  } catch {}
+  try {
+    const rawWeights = localStorage.getItem(KEY_WEIGHTS);
+    if (rawWeights) weights = normalizeWeightRecords(JSON.parse(rawWeights));
   } catch {}
   try {
     const raw = localStorage.getItem(KEY_BUBBLE_SPEED);
@@ -229,6 +239,7 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
   return {
     pregnancyInfo,
     events,
+    weights,
     updatedAt: 0,
     bubbleSpeed,
     themeMode,
@@ -252,6 +263,7 @@ export function saveState(state: AppState) {
   localStorage.setItem(KEY_STATE, JSON.stringify(state));
   localStorage.setItem(KEY_EVENTS, JSON.stringify(state.events));
   localStorage.setItem(KEY_PREG, JSON.stringify(state.pregnancyInfo));
+  localStorage.setItem(KEY_WEIGHTS, JSON.stringify(state.weights));
   localStorage.setItem(KEY_BUBBLE_SPEED, String(state.bubbleSpeed));
   localStorage.setItem(KEY_THEME_MODE, state.themeMode);
   localStorage.setItem(KEY_AI_VENDOR, state.aiVendor);
@@ -272,6 +284,7 @@ export function saveState(state: AppState) {
 export function clearAll() {
   localStorage.removeItem(KEY_EVENTS);
   localStorage.removeItem(KEY_PREG);
+  localStorage.removeItem(KEY_WEIGHTS);
   localStorage.removeItem(KEY_STATE);
   localStorage.removeItem(KEY_BUBBLE_SPEED);
   localStorage.removeItem(KEY_THEME_MODE);

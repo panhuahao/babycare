@@ -282,6 +282,374 @@ button {
   color: rgba(255, 255, 255, 0.9);
 }
 
+.weightCard {
+  overflow: hidden;
+}
+
+.weightCard .cardInner {
+  position: relative;
+  padding-top: 12px;
+}
+
+.weightCardEdge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.weightCardEdgeFill {
+  height: 100%;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(90deg, var(--pink) 0%, rgba(var(--pink2-rgb), 0.85) 100%);
+}
+
+.weightHeroRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.weightHeroMain {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.weightHeroInline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.weightHeroValue {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.weightHeroValue span {
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.weightHeroMeta {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.weightHeroSide {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.weightGestationPill {
+  white-space: nowrap;
+  min-height: 32px;
+  padding: 4px 10px;
+}
+
+.weightTrendChart {
+  margin-top: 0;
+  display: grid;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.weightTrendSvg {
+  width: 100%;
+  display: block;
+  overflow: visible;
+}
+
+.weightTrendInfo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.weightTrendInfoLabel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.weightTrendInfoMain {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightTrendInfoDate {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.weightTrendInfoValue {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.weightAxis {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 1;
+}
+
+.weightAxisGuide {
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 0.8;
+  stroke-dasharray: 2.4 3.2;
+}
+
+.weightTrendTrack {
+  fill: rgba(255, 255, 255, 0.05);
+}
+
+.weightTrendBar {
+  opacity: 0.92;
+  transition: opacity 160ms ease;
+}
+
+.weightTrendBarActive {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 0.45;
+  opacity: 1;
+}
+
+.weightTrendBarLatest {
+  opacity: 0.98;
+}
+
+.weightTrendHit {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.weightTrendHit:focus,
+.weightTrendHit:focus-visible,
+.weightTrendHit:active {
+  outline: none;
+  stroke: none;
+  fill: transparent;
+}
+
+.weightTrendEmpty {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+
+.weightQuickForm,
+.weightActionRow {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.weightBottomRow {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  align-items: end;
+  gap: 10px;
+}
+
+.weightQuickFormCompact {
+  margin-top: 0;
+  width: 88px;
+  display: grid;
+  gap: 4px;
+  align-content: end;
+  justify-self: end;
+}
+
+.weightInput {
+  min-height: 44px;
+}
+
+.weightInputCompact {
+  text-align: center;
+  padding: 8px 8px;
+  min-height: 48px;
+  border-radius: 14px;
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.weightInputHint {
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+.weightSubmitBtn {
+  min-height: 44px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(var(--pink-rgb), 0.95) 0%, rgba(var(--pink2-rgb), 0.9) 100%);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(var(--pink-rgb), 0.24);
+}
+
+.weightSubmitBtn:disabled {
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.weightGhostBtn,
+.weightMiniBtn {
+  min-height: 44px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.weightGhostBtn,
+.weightMiniBtn {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.weightManagerGrid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.weightSummaryRow {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.weightSummaryItem,
+.weightListItem {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.weightSummaryItem {
+  padding: 12px;
+}
+
+.weightSummaryValue {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.weightListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+}
+
+.weightListActions {
+  display: flex;
+  gap: 8px;
+}
+
+.weightMiniBtn {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 12px;
+}
+
+.weightMiniBtnDanger {
+  color: rgba(255, 90, 122, 0.96);
+  border-color: rgba(255, 90, 122, 0.26);
+  background: rgba(255, 90, 122, 0.1);
+}
+
+@media (max-width: 420px) {
+  .weightHeroRow,
+  .weightActionRow,
+  .weightListItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .weightHeroInline {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .weightGestationPill {
+    white-space: normal;
+    justify-content: center;
+    text-align: center;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .weightManagerGrid,
+  .weightSummaryRow {
+    grid-template-columns: 1fr;
+  }
+
+  .weightBottomRow {
+    grid-template-columns: minmax(0, 1fr) 84px;
+  }
+
+  .weightListActions {
+    width: 100%;
+  }
+
+  .weightSubmitBtn,
+  .weightMiniBtn,
+  .weightGhostBtn {
+    width: 100%;
+  }
+
+  .weightTrendInfo {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .weightTrendInfoMain {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
 .currentHourCount {
   display: flex;
   flex-direction: column;
@@ -1751,6 +2119,29 @@ button {
 
 :root[data-theme="light"] .btnDesc {
   color: rgba(0, 0, 0, 0.62);
+}
+
+:root[data-theme="light"] .weightAxis,
+:root[data-theme="light"] .weightSummaryItem,
+:root[data-theme="light"] .weightListItem,
+:root[data-theme="light"] .weightTrendEmpty,
+:root[data-theme="light"] .weightGhostBtn,
+:root[data-theme="light"] .weightMiniBtn {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .weightSummaryItem,
+:root[data-theme="light"] .weightListItem,
+:root[data-theme="light"] .weightTrendEmpty,
+:root[data-theme="light"] .weightGhostBtn,
+:root[data-theme="light"] .weightMiniBtn {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+:root[data-theme="light"] .weightMiniBtnDanger {
+  color: rgba(185, 28, 28, 0.94);
+  border-color: rgba(239, 68, 68, 0.26);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 :root[data-theme="light"] .statsStickyBtnOpen,

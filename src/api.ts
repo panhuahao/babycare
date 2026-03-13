@@ -1,9 +1,11 @@
 import { MovementEvent } from "./domain/movement";
 import { PregnancyInfo } from "./domain/pregnancy";
+import { WeightRecord } from "./domain/weight";
 
 export type RemoteState = {
   pregnancyInfo: PregnancyInfo;
   events: MovementEvent[];
+  weights: WeightRecord[];
   updatedAt: number;
   bubbleSpeed: number;
   themeMode: "dark" | "light";
