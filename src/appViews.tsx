@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type TouchEvent } from "react";
 import {
   effectiveCount,
   formatHourLabel,
@@ -733,7 +733,7 @@ export function HomePage({
           </div>
 
           <div className="weightBottomRow">
-            <WeightTrendChart records={weights} maxPoints={7} height={60} />
+            <WeightTrendChart records={weights} maxPoints={7} height={60} minVisualRangeKg={2.4} visualPaddingKg={0.45} />
 
             <div className="weightQuickForm weightQuickFormCompact">
               <input
@@ -866,14 +866,35 @@ function formatShortDateLabel(dateKey: string) {
   return dateKey.slice(5).replace("-", "/");
 }
 
+function parseDateKeyToMs(dateKey: string) {
+  const ts = new Date(`${dateKey}T00:00:00`).getTime();
+  return Number.isFinite(ts) ? ts : Date.now();
+}
+
+function formatMonthTitle(dayMs: number) {
+  const d = new Date(dayMs);
+  return `${d.getFullYear()}年${String(d.getMonth() + 1).padStart(2, "0")}月`;
+}
+
+function formatWeekRangeTitle(days: number[]) {
+  if (!days.length) return "";
+  const startKey = formatDateKey(new Date(days[0]));
+  const endKey = formatDateKey(new Date(days[days.length - 1]));
+  return `${formatShortDateLabel(startKey)} - ${formatShortDateLabel(endKey)}`;
+}
+
 function WeightTrendChart({
   records,
   maxPoints = 7,
-  height = 96
+  height = 96,
+  minVisualRangeKg = 1.8,
+  visualPaddingKg = 0.35
 }: {
   records: WeightRecord[];
   maxPoints?: number;
   height?: number;
+  minVisualRangeKg?: number;
+  visualPaddingKg?: number;
 }) {
   const series = useMemo(() => [...normalizeWeightRecords(records)].reverse().slice(-maxPoints), [records, maxPoints]);
   const chartId = useId().replace(/:/g, "");
@@ -895,24 +916,32 @@ function WeightTrendChart({
   const padX = 8;
   const padY = 6;
   const values = series.map((item) => item.weightKg);
-  let min = Math.min(...values);
-  let max = Math.max(...values);
-  if (max - min < 0.4) {
-    min -= 0.2;
-    max += 0.2;
-  }
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const spread = rawMax - rawMin;
+  const mid = (rawMin + rawMax) / 2;
+  const visualRange = Math.max(minVisualRangeKg, spread + visualPaddingKg * 2);
+  const min = mid - visualRange / 2;
+  const max = mid + visualRange / 2;
   const usableWidth = width - padX * 2;
   const usableHeight = height - padY * 2;
+  const visualBandRatio = 0.58;
+  const visualBandOffset = 0.22;
   const slotWidth = usableWidth / series.length;
   const barWidth = Math.max(5.5, Math.min(9.5, slotWidth - 4));
   const bars = series.map((item, idx) => {
-    const ratio = max === min ? 0.5 : (item.weightKg - min) / (max - min);
+    const normalizedRatio = max === min ? 0.5 : (item.weightKg - min) / (max - min);
+    const ratio = visualBandOffset + normalizedRatio * visualBandRatio;
     const barHeight = Math.max(9, ratio * usableHeight);
     const x = padX + slotWidth * idx + (slotWidth - barWidth) / 2;
     const y = height - padY - barHeight;
     return { ...item, x, y, barHeight };
   });
   const activeBar = bars.find((item) => item.date === activeDate) ?? bars[bars.length - 1];
+  const activeIndex = Math.max(
+    0,
+    bars.findIndex((item) => item.date === activeBar.date)
+  );
   const guides = [0.32, 0.64].map((ratio) => padY + usableHeight * ratio);
 
   function activateBar(date: string) {
@@ -922,7 +951,7 @@ function WeightTrendChart({
   return (
     <div className="weightTrendChart">
       <div className="weightTrendInfo" aria-live="polite">
-        <div className="weightTrendInfoLabel">所选记录</div>
+        <div className="weightTrendInfoLabel">{`近${series.length}次 · 波动 ${spread.toFixed(1)} kg`}</div>
         <div className="weightTrendInfoMain">
           <span className="weightTrendInfoDate">{formatShortDateLabel(activeBar.date)}</span>
           <strong className="weightTrendInfoValue">{activeBar.weightKg.toFixed(1)} kg</strong>
@@ -938,15 +967,25 @@ function WeightTrendChart({
       >
         <defs>
           <linearGradient id={`${chartId}-bar`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255, 173, 198, 0.98)" />
-            <stop offset="100%" stopColor="rgba(255, 109, 153, 0.6)" />
+            <stop offset="0%" stopColor="rgba(255, 188, 210, 0.94)" />
+            <stop offset="52%" stopColor="rgba(255, 146, 183, 0.84)" />
+            <stop offset="100%" stopColor="rgba(255, 110, 154, 0.62)" />
           </linearGradient>
           <linearGradient id={`${chartId}-bar-active`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255, 242, 247, 1)" />
-            <stop offset="100%" stopColor="rgba(255, 126, 170, 0.94)" />
+            <stop offset="0%" stopColor="rgba(255, 241, 246, 0.98)" />
+            <stop offset="46%" stopColor="rgba(255, 171, 201, 0.98)" />
+            <stop offset="100%" stopColor="rgba(255, 120, 166, 0.96)" />
           </linearGradient>
         </defs>
 
+        <rect
+          x={padX + slotWidth * activeIndex + 1}
+          y={padY - 1}
+          width={Math.max(0, slotWidth - 2)}
+          height={usableHeight + 2}
+          rx="6"
+          className="weightTrendColumnActive"
+        />
         {guides.map((y) => (
           <path key={y} d={`M ${padX} ${y} H ${width - padX}`} className="weightAxisGuide" />
         ))}
@@ -992,6 +1031,145 @@ function WeightTrendChart({
   );
 }
 
+function WeightScrollableLineChart({
+  records,
+  activeDate,
+  onSelectDate,
+  height = 168,
+  minVisualRangeKg = 2.0,
+  visualPaddingKg = 0.35
+}: {
+  records: WeightRecord[];
+  activeDate: string | null;
+  onSelectDate: (date: string) => void;
+  height?: number;
+  minVisualRangeKg?: number;
+  visualPaddingKg?: number;
+}) {
+  const series = useMemo(() => [...normalizeWeightRecords(records)].reverse(), [records]);
+  const chartId = useId().replace(/:/g, "");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const width = Math.max(320, 34 + Math.max(0, series.length - 1) * 38);
+  const padX = 18;
+  const padTop = 18;
+  const padBottom = 28;
+  const usableHeight = height - padTop - padBottom;
+
+  const points = useMemo(() => {
+    if (!series.length) return [] as Array<WeightRecord & { x: number; y: number }>;
+    const values = series.map((item) => item.weightKg);
+    const rawMin = Math.min(...values);
+    const rawMax = Math.max(...values);
+    const spread = rawMax - rawMin;
+    const mid = (rawMin + rawMax) / 2;
+    const visualRange = Math.max(minVisualRangeKg, spread + visualPaddingKg * 2);
+    const min = mid - visualRange / 2;
+    const max = mid + visualRange / 2;
+    const visualBandRatio = 0.56;
+    const visualBandOffset = 0.2;
+    return series.map((item, idx) => {
+      const normalizedRatio = max === min ? 0.5 : (item.weightKg - min) / (max - min);
+      const ratio = visualBandOffset + normalizedRatio * visualBandRatio;
+      const x = padX + idx * 38;
+      const y = height - padBottom - ratio * usableHeight;
+      return { ...item, x, y };
+    });
+  }, [height, minVisualRangeKg, series, usableHeight, visualPaddingKg]);
+  const activePoint = points.find((item) => item.date === activeDate) ?? points[points.length - 1] ?? null;
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !points.length || !activePoint) return;
+    const idx = points.findIndex((item) => item.date === activePoint.date);
+    if (idx < 0) return;
+    const focusX = points[idx].x;
+    const target = Math.max(0, focusX - el.clientWidth * 0.5);
+    el.scrollTo({ left: target, behavior: "smooth" });
+  }, [activePoint?.date, points]);
+
+  if (!series.length || !activePoint) {
+    return (
+      <div className="weightTrendEmpty">
+        <div className="muted" style={{ fontSize: 12 }}>还没有体重记录，先从今天开始记一条吧。</div>
+      </div>
+    );
+  }
+
+  const linePath = points.map((point, idx) => `${idx === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const areaPath = `${linePath} L ${points[points.length - 1].x} ${height - padBottom} L ${points[0].x} ${height - padBottom} Z`;
+  const guides = [0.22, 0.48, 0.74].map((ratio) => padTop + usableHeight * ratio);
+  const labelStep = Math.max(1, Math.ceil(points.length / 5));
+
+  return (
+    <div className="weightLineCard">
+      <div className="weightLineHead">
+        <div className="weightLineSummary">
+          <div className="weightLineLabel">{`共 ${series.length} 条记录`}</div>
+          <div className="weightLineValue">
+            <span>{formatShortDateLabel(activePoint.date)}</span>
+            <strong>{activePoint.weightKg.toFixed(1)} kg</strong>
+          </div>
+        </div>
+        <div className="weightLineHint">左右滑动查看趋势</div>
+      </div>
+
+      <div className="weightLineScroll" ref={scrollRef}>
+        <svg className="weightLineSvg" style={{ width, height }} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-label="体重折线图">
+          <defs>
+            <linearGradient id={`${chartId}-area`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(255, 163, 191, 0.28)" />
+              <stop offset="100%" stopColor="rgba(255, 163, 191, 0.02)" />
+            </linearGradient>
+            <linearGradient id={`${chartId}-line`} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="rgba(255, 188, 210, 0.82)" />
+              <stop offset="100%" stopColor="rgba(255, 122, 168, 0.98)" />
+            </linearGradient>
+          </defs>
+
+          {guides.map((y) => (
+            <path key={y} d={`M ${padX - 6} ${y} H ${width - padX + 6}`} className="weightLineGuide" />
+          ))}
+          <path d={areaPath} className="weightLineArea" fill={`url(#${chartId}-area)`} />
+          <path d={linePath} className="weightLinePath" stroke={`url(#${chartId}-line)`} />
+          <path d={`M ${activePoint.x} ${padTop - 4} V ${height - padBottom + 4}`} className="weightLineActiveGuide" />
+
+          {points.map((point, idx) => {
+            const isActive = point.date === activePoint.date;
+            const showLabel = idx % labelStep === 0 || idx === points.length - 1;
+            return (
+              <g key={point.date}>
+                <circle cx={point.x} cy={point.y} r={isActive ? 4.2 : 3.1} className={`weightLineDot ${isActive ? "weightLineDotActive" : ""}`} />
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r={14}
+                  fill="transparent"
+                  className="weightLineHit"
+                  tabIndex={0}
+                  onClick={() => onSelectDate(point.date)}
+                  onFocus={() => onSelectDate(point.date)}
+                  onTouchStart={() => onSelectDate(point.date)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.preventDefault();
+                    onSelectDate(point.date);
+                  }}
+                />
+                {showLabel ? (
+                  <text x={point.x} y={height - 9} textAnchor="middle" className="weightLineTick">
+                    {formatShortDateLabel(point.date)}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function WeightRecordManager({
   weights,
   onUpsertWeight,
@@ -1001,36 +1179,68 @@ function WeightRecordManager({
   onUpsertWeight: (date: string, weightKg: number) => void;
   onDeleteWeight: (date: string) => void;
 }) {
-  const latestWeight = useMemo(() => getLatestWeightRecord(weights), [weights]);
+  const normalizedWeights = useMemo(() => normalizeWeightRecords(weights), [weights]);
+  const latestWeight = normalizedWeights[0] ?? null;
   const todayKey = formatDateKey(new Date());
   const [draftDate, setDraftDate] = useState(todayKey);
-  const [draftWeight, setDraftWeight] = useState(() => {
-    const today = weights.find((item) => item.date === todayKey);
-    return today ? String(today.weightKg) : "";
-  });
-  const [query, setQuery] = useState("");
-
-  const filteredWeights = useMemo(() => {
-    const normalized = normalizeWeightRecords(weights);
-    const keyword = query.trim();
-    if (!keyword) return normalized;
-    return normalized.filter((item) => item.date.includes(keyword));
-  }, [weights, query]);
-
-  const existingDraft = useMemo(() => weights.find((item) => item.date === draftDate) ?? null, [weights, draftDate]);
+  const [draftWeight, setDraftWeight] = useState("");
+  const [calendarCursor, setCalendarCursor] = useState(() => startOfDayMs(Date.now()));
+  const weekTouchStartXRef = useRef<number | null>(null);
+  const weekTouchStartYRef = useRef<number | null>(null);
+  const weightMap = useMemo(() => new Map(normalizedWeights.map((item) => [item.date, item])), [normalizedWeights]);
+  const existingDraft = weightMap.get(draftDate) ?? null;
   const draftValue = normalizeWeightKg(draftWeight);
+  const weekDays = useMemo(() => {
+    const d = new Date(calendarCursor);
+    const day = (d.getDay() + 6) % 7;
+    const start = calendarCursor - day * 86_400_000;
+    return Array.from({ length: 7 }, (_, i) => start + i * 86_400_000);
+  }, [calendarCursor]);
 
   useEffect(() => {
-    if (existingDraft) setDraftWeight(String(existingDraft.weightKg));
-  }, [existingDraft?.date, existingDraft?.weightKg]);
+    setDraftWeight(existingDraft ? String(existingDraft.weightKg) : "");
+  }, [draftDate, existingDraft?.date, existingDraft?.weightKg]);
+
+  function syncDraftDate(date: string) {
+    setDraftDate(date);
+    setCalendarCursor(startOfDayMs(parseDateKeyToMs(date)));
+  }
+
+  function resetDraft() {
+    syncDraftDate(todayKey);
+  }
+
+  function shiftWeek(offset: number) {
+    setCalendarCursor((v) => v + offset * 7 * 86_400_000);
+  }
+
+  function onWeekTouchStart(e: TouchEvent<HTMLDivElement>) {
+    const touch = e.touches[0];
+    if (!touch) return;
+    weekTouchStartXRef.current = touch.clientX;
+    weekTouchStartYRef.current = touch.clientY;
+  }
+
+  function onWeekTouchEnd(e: TouchEvent<HTMLDivElement>) {
+    const touch = e.changedTouches[0];
+    const startX = weekTouchStartXRef.current;
+    const startY = weekTouchStartYRef.current;
+    weekTouchStartXRef.current = null;
+    weekTouchStartYRef.current = null;
+    if (!touch || startX == null || startY == null) return;
+    const deltaX = touch.clientX - startX;
+    const deltaY = touch.clientY - startY;
+    if (Math.abs(deltaX) < 36 || Math.abs(deltaX) <= Math.abs(deltaY)) return;
+    shiftWeek(deltaX > 0 ? -1 : 1);
+  }
 
   return (
     <div className="card">
       <div className="cardInner">
         <div className="recordRow">
           <div>
-            <div className="recordTitle">体重管理</div>
-            <div className="recordSub">支持按日期增改删查；同一天仅保留一条记录</div>
+            <div className="recordTitle">体重统计</div>
+            <div className="recordSub">折线趋势 + 单周日历，点击日期即可查看和修改体重</div>
           </div>
           <div className="pill">
             <strong>{weights.length}</strong>
@@ -1039,115 +1249,123 @@ function WeightRecordManager({
         </div>
 
         <div style={{ height: 12 }} />
-        <WeightTrendChart records={weights} maxPoints={14} height={112} />
+        <WeightScrollableLineChart
+          records={normalizedWeights}
+          activeDate={existingDraft?.date ?? latestWeight?.date ?? null}
+          onSelectDate={syncDraftDate}
+          height={168}
+          minVisualRangeKg={2.2}
+          visualPaddingKg={0.4}
+        />
 
-        <div className="weightSummaryRow">
-          <div className="weightSummaryItem">
-            <div className="label">最新</div>
-            <div className="weightSummaryValue">{latestWeight ? formatWeightKg(latestWeight.weightKg) : "--"}</div>
-          </div>
-          <div className="weightSummaryItem">
-            <div className="label">最近日期</div>
-            <div className="weightSummaryValue">{latestWeight?.date ?? "--"}</div>
-          </div>
-        </div>
-
-        <div className="weightManagerGrid">
+        <div className="weightComposerCard">
           <div className="formRow">
             <div className="label">日期</div>
-            <input className="input" type="date" value={draftDate} onChange={(e) => setDraftDate(e.target.value)} />
+            <input className="input" type="date" value={draftDate} onChange={(e) => syncDraftDate(e.target.value)} />
           </div>
-          <div className="formRow">
-            <div className="label">体重（kg）</div>
-            <input
-              className="input"
-              inputMode="decimal"
-              placeholder="例如 58.6"
-              value={draftWeight}
-              onChange={(e) => setDraftWeight(e.target.value)}
-            />
-          </div>
-        </div>
 
-        <div className="weightActionRow">
-          <button
-            type="button"
-            className="weightSubmitBtn"
-            disabled={!draftDate || draftValue == null}
-            onClick={() => {
-              if (!draftDate || draftValue == null) return;
-              onUpsertWeight(draftDate, draftValue);
-            }}
-          >
-            {existingDraft ? "更新记录" : "新增记录"}
-          </button>
-          <button
-            type="button"
-            className="weightGhostBtn"
-            onClick={() => {
-              setDraftDate(todayKey);
-              const today = weights.find((item) => item.date === todayKey);
-              setDraftWeight(today ? String(today.weightKg) : "");
-            }}
-          >
-            重置
-          </button>
-        </div>
-
-        <div className="formRow" style={{ marginTop: 14 }}>
-          <div className="label">查询</div>
-          <input
-            className="input"
-            placeholder="输入 2026-03 或 2026-03-06"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-
-        <div className="list" style={{ marginTop: 12 }}>
-          {filteredWeights.length ? (
-            filteredWeights.map((item) => (
-              <div key={item.date} className="weightListItem">
-                <div className="recordLeft">
-                  <div className="recordTitle">{item.date}</div>
-                  <div className="recordSub">{formatWeightKg(item.weightKg)}</div>
-                </div>
-                <div className="weightListActions">
-                  <button
-                    type="button"
-                    className="weightMiniBtn"
-                    onClick={() => {
-                      setDraftDate(item.date);
-                      setDraftWeight(String(item.weightKg));
-                    }}
-                  >
-                    编辑
-                  </button>
-                  <button
-                    type="button"
-                    className="weightMiniBtn weightMiniBtnDanger"
-                    onClick={() => {
-                      if (!window.confirm(`确认删除 ${item.date} 的体重记录？`)) return;
-                      onDeleteWeight(item.date);
-                      if (draftDate === item.date) {
-                        setDraftDate(todayKey);
-                        const today = weights.find((entry) => entry.date === todayKey && entry.date !== item.date);
-                        setDraftWeight(today ? String(today.weightKg) : "");
-                      }
-                    }}
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="emptyBox">
-              <div className="emptyIcon">⚖️</div>
-              <div className="emptyTitle">没有匹配的体重记录</div>
-              <div className="emptySub">可以先新增一条，或调整查询日期。</div>
+          <div className="weightComposerBar">
+            <div className="formRow weightValueRow">
+              <div className="label">体重（kg）</div>
+              <input
+                className="input weightValueInput"
+                inputMode="decimal"
+                placeholder="例如 58.6"
+                value={draftWeight}
+                onChange={(e) => setDraftWeight(e.target.value)}
+              />
             </div>
-          )}
+
+            <div className="weightComposerActions">
+              <button
+                type="button"
+                className="weightSubmitBtn"
+                disabled={!draftDate || draftValue == null}
+                onClick={() => {
+                  if (!draftDate || draftValue == null) return;
+                  onUpsertWeight(draftDate, draftValue);
+                }}
+              >
+                {existingDraft ? "更新记录" : "新增记录"}
+              </button>
+              <button
+                type="button"
+                className="weightGhostBtn"
+                onClick={resetDraft}
+              >
+                回到今天
+              </button>
+              {existingDraft ? (
+                <button
+                  type="button"
+                  className="weightMiniBtn weightMiniBtnDanger"
+                  onClick={() => {
+                    if (!window.confirm(`确认删除 ${draftDate} 的体重记录？`)) return;
+                    onDeleteWeight(draftDate);
+                    setDraftWeight("");
+                  }}
+                >
+                  删除记录
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="weightComposerMeta">
+            <div className="weightComposerHint">
+              {existingDraft ? `已记录：${formatWeightKg(existingDraft.weightKg)}` : "当前日期还没有体重记录"}
+            </div>
+            <div className="weightComposerHint">点击折线点或下方周历日期，会自动切换到对应日期</div>
+          </div>
+        </div>
+
+        <div className="weightCalendarCard" onTouchStart={onWeekTouchStart} onTouchEnd={onWeekTouchEnd} onTouchCancel={onWeekTouchEnd}>
+          <div className="weightCalendarHeader">
+            <div>
+              <div className="label">体重周历</div>
+              <div className="weightCalendarSub">左右滑动切换周次，或直接选择日期查看</div>
+            </div>
+            <div className="weightCalendarNav">
+              <button type="button" className="calNavBtn" onClick={() => shiftWeek(-1)}>
+                上周
+              </button>
+              <div className="weightCalendarTitle">{formatWeekRangeTitle(weekDays)}</div>
+              <button type="button" className="calNavBtn" onClick={() => shiftWeek(1)}>
+                下周
+              </button>
+            </div>
+          </div>
+
+          <div className="calWeekdays" aria-hidden="true">
+            {["一", "二", "三", "四", "五", "六", "日"].map((w) => (
+              <div key={w} className="calWeekday">
+                {w}
+              </div>
+            ))}
+          </div>
+
+          <div className="weightCalGrid">
+            {weekDays.map((dayMs) => {
+              const day = new Date(dayMs);
+              const dayKey = formatDateKey(day);
+              const record = weightMap.get(dayKey);
+              const isToday = dayKey === todayKey;
+              const isSelected = dayKey === draftDate;
+              return (
+                <button
+                  key={dayKey}
+                  type="button"
+                  className={`weightCalCell ${record ? "weightCalCellHasData" : ""} ${isToday ? "weightCalCellToday" : ""} ${
+                    isSelected ? "weightCalCellSelected" : ""
+                  }`}
+                  onClick={() => syncDraftDate(dayKey)}
+                >
+                  <div className="weightCalDay">{day.getDate()}</div>
+                  <div className="weightCalValue">{record ? record.weightKg.toFixed(1) : ""}</div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -2872,4 +3090,3 @@ export function WidgetsPage({
     </div>
   );
 }
-

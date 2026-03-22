@@ -378,25 +378,27 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
 .weightTrendInfoLabel {
   font-size: 11px;
   color: var(--muted);
+  letter-spacing: 0.01em;
 }
 
 .weightTrendInfoMain {
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
+  gap: 10px;
+  padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(var(--pink-rgb), 0.08) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 18px rgba(15, 23, 42, 0.12);
 }
 
 .weightTrendInfoDate {
@@ -405,8 +407,9 @@ button {
 }
 
 .weightTrendInfoValue {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text);
+  letter-spacing: 0.01em;
 }
 
 .weightAxis {
@@ -420,19 +423,29 @@ button {
   stroke-dasharray: 2.4 3.2;
 }
 
+.weightTrendColumnActive {
+  fill: rgba(var(--pink-rgb), 0.08);
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 0.5;
+}
+
 .weightTrendTrack {
-  fill: rgba(255, 255, 255, 0.05);
+  fill: rgba(255, 255, 255, 0.035);
 }
 
 .weightTrendBar {
-  opacity: 0.92;
-  transition: opacity 160ms ease;
+  opacity: 0.88;
+  transition: opacity 160ms ease, transform 160ms ease, filter 160ms ease;
+  transform-box: fill-box;
+  transform-origin: center bottom;
 }
 
 .weightTrendBarActive {
-  stroke: rgba(255, 255, 255, 0.18);
-  stroke-width: 0.45;
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 0.4;
   opacity: 1;
+  transform: translateY(-0.5px);
+  filter: drop-shadow(0 6px 14px rgba(var(--pink-rgb), 0.16));
 }
 
 .weightTrendBarLatest {
@@ -442,6 +455,7 @@ button {
 .weightTrendHit {
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  tap-highlight-color: transparent;
 }
 
 .weightTrendHit:focus,
@@ -542,35 +556,301 @@ button {
 }
 
 .weightManagerGrid {
-  margin-top: 14px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-.weightSummaryRow {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.weightSummaryItem,
+.weightStatsHeader,
+.weightComposerCard,
+.weightCalendarCard,
+.weightLineCard,
 .weightListItem {
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
 }
 
-.weightSummaryItem {
+.weightStatsHeader {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.weightLatestRow {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.weightLatestValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.weightLatestValue span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.weightLatestDate {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightSelectedChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.weightSelectedChip strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightLineCard {
+  padding: 12px 12px 10px;
+}
+
+.weightLineHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.weightLineSummary {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.weightLineLabel {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.weightLineValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.weightLineValue span {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightLineValue strong {
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightLineHint {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.weightLineScroll {
+  margin-top: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  scrollbar-width: none;
+}
+
+.weightLineScroll::-webkit-scrollbar {
+  display: none;
+}
+
+.weightLineSvg {
+  display: block;
+  overflow: visible;
+}
+
+.weightLineGuide {
+  stroke: rgba(255, 255, 255, 0.06);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.weightLineArea {
+  pointer-events: none;
+}
+
+.weightLinePath {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 8px 18px rgba(var(--pink-rgb), 0.12));
+}
+
+.weightLineActiveGuide {
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 1;
+}
+
+.weightLineDot {
+  fill: rgba(255, 226, 236, 0.9);
+  stroke: rgba(var(--pink2-rgb), 0.78);
+  stroke-width: 1.4;
+}
+
+.weightLineDotActive {
+  fill: rgba(255, 244, 248, 1);
+  stroke-width: 2;
+}
+
+.weightLineHit {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+}
+
+.weightLineTick {
+  fill: rgba(255, 255, 255, 0.48);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.weightComposerCard {
+  margin-top: 12px;
   padding: 12px;
 }
 
-.weightSummaryValue {
-  margin-top: 6px;
-  font-size: 14px;
-  font-weight: 800;
+.weightComposerBar {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.weightValueRow {
+  width: 118px;
+  flex-shrink: 0;
+}
+
+.weightValueInput {
+  text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.weightComposerMeta {
+  margin-top: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.weightComposerHint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.weightComposerActions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.weightCalendarCard {
+  margin-top: 14px;
+  padding: 12px;
+}
+
+.weightCalendarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.weightCalendarSub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.weightCalendarNav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.weightCalendarTitle {
+  min-width: 92px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.weightCalGrid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.weightListHeader {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.weightListSummary {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.weightTextBtn {
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: rgba(var(--pink2-rgb), 0.95);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 2px;
+}
+
+.weightList {
+  gap: 8px;
+}
+
+.weightListHeaderCompact {
+  margin-top: 12px;
 }
 
 .weightListItem {
@@ -578,18 +858,84 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px;
+  padding: 10px 12px;
+}
+
+.weightCalCell {
+  min-height: 58px;
+  padding: 8px 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  align-content: space-between;
+  gap: 6px;
+  text-align: left;
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.weightCalCellMuted {
+  opacity: 0.42;
+}
+
+.weightCalCellHasData {
+  background: rgba(var(--pink-rgb), 0.08);
+  border-color: rgba(var(--pink-rgb), 0.16);
+}
+
+.weightCalCellToday {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.weightCalCellSelected {
+  background: linear-gradient(180deg, rgba(var(--pink-rgb), 0.18) 0%, rgba(var(--pink-rgb), 0.08) 100%);
+  border-color: rgba(var(--pink2-rgb), 0.4);
+  box-shadow: 0 10px 24px rgba(var(--pink-rgb), 0.14);
+}
+
+.weightCalDay {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.weightCalValue {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightListMeta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.weightListDate {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightListValue {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .weightListActions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .weightMiniBtn {
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 32px;
+  padding: 0 10px;
   border-radius: 12px;
+  font-size: 12px;
 }
 
 .weightMiniBtnDanger {
@@ -600,7 +946,6 @@ button {
 
 @media (max-width: 420px) {
   .weightHeroRow,
-  .weightActionRow,
   .weightListItem {
     flex-direction: column;
     align-items: stretch;
@@ -619,8 +964,7 @@ button {
     font-size: 11px;
   }
 
-  .weightManagerGrid,
-  .weightSummaryRow {
+  .weightManagerGrid {
     grid-template-columns: 1fr;
   }
 
@@ -647,6 +991,52 @@ button {
   .weightTrendInfoMain {
     width: 100%;
     justify-content: space-between;
+    padding: 6px 10px;
+  }
+
+  .weightStatsHeader,
+  .weightLineHead,
+  .weightCalendarHeader,
+  .weightCalendarNav,
+  .weightListHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .weightComposerBar,
+  .weightComposerActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .weightComposerCard,
+  .weightCalendarCard,
+  .weightLineCard {
+    padding: 10px;
+  }
+
+  .weightLatestRow {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .weightSelectedChip,
+  .weightCalendarTitle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .weightValueRow {
+    width: 100%;
+  }
+
+  .weightCalGrid {
+    gap: 6px;
+  }
+
+  .weightCalCell {
+    min-height: 54px;
   }
 }
 
@@ -2122,20 +2512,57 @@ button {
 }
 
 :root[data-theme="light"] .weightAxis,
-:root[data-theme="light"] .weightSummaryItem,
+:root[data-theme="light"] .weightStatsHeader,
+:root[data-theme="light"] .weightComposerCard,
+:root[data-theme="light"] .weightCalendarCard,
+:root[data-theme="light"] .weightLineCard,
 :root[data-theme="light"] .weightListItem,
+:root[data-theme="light"] .weightCalCell,
 :root[data-theme="light"] .weightTrendEmpty,
 :root[data-theme="light"] .weightGhostBtn,
 :root[data-theme="light"] .weightMiniBtn {
   border-color: rgba(0, 0, 0, 0.1);
 }
 
-:root[data-theme="light"] .weightSummaryItem,
+:root[data-theme="light"] .weightStatsHeader,
+:root[data-theme="light"] .weightComposerCard,
+:root[data-theme="light"] .weightCalendarCard,
+:root[data-theme="light"] .weightLineCard,
 :root[data-theme="light"] .weightListItem,
+:root[data-theme="light"] .weightCalCell,
 :root[data-theme="light"] .weightTrendEmpty,
 :root[data-theme="light"] .weightGhostBtn,
 :root[data-theme="light"] .weightMiniBtn {
   background: rgba(255, 255, 255, 0.82);
+}
+
+:root[data-theme="light"] .weightTextBtn {
+  color: rgba(219, 39, 119, 0.96);
+}
+
+:root[data-theme="light"] .weightSelectedChip,
+:root[data-theme="light"] .weightCalCellHasData {
+  background: rgba(244, 114, 182, 0.08);
+}
+
+:root[data-theme="light"] .weightCalCellSelected {
+  background: linear-gradient(180deg, rgba(244, 114, 182, 0.16) 0%, rgba(244, 114, 182, 0.08) 100%);
+}
+
+:root[data-theme="light"] .weightLineGuide,
+:root[data-theme="light"] .weightLineActiveGuide {
+  stroke: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .weightLineTick,
+:root[data-theme="light"] .weightLineHint,
+:root[data-theme="light"] .weightComposerHint,
+:root[data-theme="light"] .weightCalendarSub,
+:root[data-theme="light"] .weightListSummary,
+:root[data-theme="light"] .weightLatestDate,
+:root[data-theme="light"] .weightLineLabel,
+:root[data-theme="light"] .weightSelectedChip {
+  color: rgba(0, 0, 0, 0.58);
 }
 
 :root[data-theme="light"] .weightMiniBtnDanger {
