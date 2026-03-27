@@ -29,6 +29,8 @@ import {
   fetchJijinhaoQuotes,
   fetchJson,
   fetchText,
+  formatYmdHmInTimeZone,
+  formatYmdInTimeZone,
   formatYmdFromUtcMs,
   loadDailyMenuData,
   parseCngoldBars,
@@ -37,6 +39,393 @@ import {
   parseYmdUtcStart,
   sleepMs
 } from "./utils.js";
+import {
+  buildThinkingExtra,
+  normalizeTextAiProvider,
+  resolveTextAiModel,
+  resolveTextAiProviderRuntime
+} from "./aiProviders.js";
+
+const AI_PRECIOUS_PRICE_CACHE_MS = 10 * 60_000;
+const AI_PRECIOUS_PRICE_SECTION_TITLES = {
+  bank: "银行金银",
+  jewelry: "首饰金",
+  recycle: "回收价格"
+};
+
+let aiPreciousPriceCache = { at: 0, key: "", payload: null };
+
+function pickPreciousPriceModel(vendor, requestedModel, state) {
+  return resolveTextAiModel(state, vendor, requestedModel);
+}
+
+function extractAiRequestId(aiRes) {
+  return typeof aiRes?.request_id === "string" ? aiRes.request_id : typeof aiRes?.id === "string" ? aiRes.id : "";
+}
+
+async function requestTextAi({
+  provider,
+  model,
+  system,
+  userText,
+  thinking,
+  timeoutMs,
+  temperature,
+  topP,
+  maxTokens,
+  responseFormat,
+  search
+}) {
+  const runtime = resolveTextAiProviderRuntime(provider);
+  if (!runtime.apiKey) {
+    throw new Error(`${runtime.label} 未配置 API Key`);
+  }
+  if (!runtime.baseUrl) {
+    throw new Error(`${runtime.label} 未配置 Base URL`);
+  }
+
+  const endpointFamily = runtime.endpointFamily;
+  if (endpointFamily === "responses") {
+    const payload = {
+      model,
+      input: [
+        { role: "system", content: system },
+        { role: "user", content: userText }
+      ],
+      temperature,
+      max_output_tokens: maxTokens,
+      ...buildThinkingExtra(provider, model, thinking)
+    };
+    if (responseFormat === "json_object") {
+      payload.text = { format: { type: "json_object" } };
+    }
+    if (search) {
+      payload.tools = [{ type: "web_search" }];
+    }
+    return await fetchJson(`${runtime.baseUrl}/responses`, {
+      timeoutMs,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${runtime.apiKey}`
+      },
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  }
+
+  const payload = {
+    model,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userText }
+    ],
+    temperature,
+    top_p: topP,
+    max_tokens: maxTokens,
+    stream: false,
+    ...buildThinkingExtra(provider, model, thinking)
+  };
+  if (responseFormat === "json_object" && provider === "zhipu") {
+    payload.response_format = { type: "json_object" };
+  }
+  if (search && provider === "zhipu") {
+    payload.tools = [
+      {
+        type: "web_search",
+        web_search: {
+          enable: true,
+          search_result: false,
+          count: 6,
+          content_size: "medium",
+          search_recency_filter: "oneDay"
+        }
+      }
+    ];
+    payload.do_sample = false;
+  }
+  if (provider === "aliyun") {
+    payload.enable_search = Boolean(search);
+  }
+  if (provider === "modelscope" && search) {
+    payload.enable_search = true;
+  }
+  return await fetchJson(`${runtime.baseUrl}/chat/completions`, {
+    timeoutMs,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${runtime.apiKey}`
+    },
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+function collectAiTextParts(value, out = []) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed) out.push(trimmed);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectAiTextParts(item, out);
+    return out;
+  }
+  if (!value || typeof value !== "object") return out;
+  if (typeof value.text === "string") collectAiTextParts(value.text, out);
+  if (typeof value.output_text === "string") collectAiTextParts(value.output_text, out);
+  if (typeof value.content === "string" || Array.isArray(value.content) || (value.content && typeof value.content === "object")) {
+    collectAiTextParts(value.content, out);
+  }
+  if (typeof value.arguments === "string") collectAiTextParts(value.arguments, out);
+  return out;
+}
+
+function extractAiText(aiRes) {
+  const direct = aiRes?.choices?.[0]?.message?.content;
+  const directTexts = collectAiTextParts(direct);
+  if (directTexts.length) return directTexts.join("\n");
+  if (typeof aiRes?.output_text === "string" && aiRes.output_text.trim()) return aiRes.output_text.trim();
+  const outputTexts = collectAiTextParts(aiRes?.output);
+  if (outputTexts.length) return outputTexts.join("\n");
+  return "";
+}
+
+function repairJsonCandidate(text) {
+  if (typeof text !== "string") return "";
+  return text
+    .replace(/^\uFEFF/, "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*:)/g, '$1"$2"$3')
+    .replace(/,\s*([}\]])/g, "$1");
+}
+
+function tryParseJsonObject(candidate) {
+  if (typeof candidate !== "string") return null;
+  const trimmed = repairJsonCandidate(candidate.trim());
+  if (!trimmed) return null;
+  const attempts = [trimmed];
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) attempts.push(trimmed);
+  for (const attempt of attempts) {
+    try {
+      const parsed = JSON.parse(attempt);
+      if (typeof parsed === "string") {
+        const nested = tryParseJsonObject(parsed);
+        if (nested) return nested;
+        continue;
+      }
+      if (Array.isArray(parsed)) {
+        const firstObject = parsed.find((item) => item && typeof item === "object");
+        if (firstObject && !Array.isArray(firstObject)) return firstObject;
+        continue;
+      }
+      if (parsed && typeof parsed === "object") {
+        if (typeof parsed.json === "string") {
+          const nested = tryParseJsonObject(parsed.json);
+          if (nested) return nested;
+        }
+        return parsed;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+function extractBalancedJsonCandidates(text) {
+  const out = [];
+  if (typeof text !== "string") return out;
+  for (let start = 0; start < text.length; start++) {
+    if (text[start] !== "{") continue;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (ch === "\\") {
+          escaped = true;
+          continue;
+        }
+        if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === "{") depth += 1;
+      if (ch === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          out.push(text.slice(start, i + 1));
+          break;
+        }
+      }
+    }
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function parseLooseJsonObject(text) {
+  if (typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const candidates = [trimmed];
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) candidates.push(fenced[1].trim());
+  candidates.push(...extractBalancedJsonCandidates(trimmed));
+  for (const candidate of candidates) {
+    const parsed = tryParseJsonObject(candidate);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function parsePreciousPriceNumber(value) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? Math.round(value * 100) / 100 : null;
+  }
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/,/g, "").trim();
+  if (!normalized) return null;
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number(match[0]);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * 100) / 100;
+}
+
+function normalizeAiPreciousPriceItem(item) {
+  const name = typeof item?.name === "string" ? item.name.trim().slice(0, 40) : "";
+  const metalRaw = typeof item?.metal === "string" ? item.metal.trim().toLowerCase() : "";
+  const metal = metalRaw === "silver" || /白银/.test(metalRaw) ? "silver" : "gold";
+  const price = parsePreciousPriceNumber(item?.price);
+  const source = typeof item?.source === "string" ? item.source.trim().slice(0, 48) : "";
+  const note = typeof item?.note === "string" ? item.note.trim().slice(0, 80) : "";
+  const unit = typeof item?.unit === "string" && item.unit.trim() ? item.unit.trim().slice(0, 12) : "元/克";
+  if (!name || price == null) return null;
+  return { name, metal, price, unit, source, note };
+}
+
+function normalizeAiPreciousPriceSection(sectionKey, rawSection) {
+  const title = typeof rawSection?.title === "string" && rawSection.title.trim() ? rawSection.title.trim().slice(0, 20) : AI_PRECIOUS_PRICE_SECTION_TITLES[sectionKey];
+  const rawItems = Array.isArray(rawSection?.items) ? rawSection.items : [];
+  const items = rawItems
+    .map((item) => normalizeAiPreciousPriceItem(item))
+    .filter((item) => item && isPlausiblePreciousPrice(sectionKey, item))
+    .slice(0, 6);
+  return { title, items };
+}
+
+function normalizeAiPreciousPricePayload(raw) {
+  const bank = normalizeAiPreciousPriceSection("bank", raw?.sections?.bank ?? raw?.bank ?? {});
+  const jewelry = normalizeAiPreciousPriceSection("jewelry", raw?.sections?.jewelry ?? raw?.jewelry ?? {});
+  const recycle = normalizeAiPreciousPriceSection("recycle", raw?.sections?.recycle ?? raw?.recycle ?? {});
+  return {
+    asOf: typeof raw?.asOf === "string" ? raw.asOf.trim().slice(0, 32) : "",
+    disclaimer:
+      typeof raw?.disclaimer === "string" && raw.disclaimer.trim()
+        ? raw.disclaimer.trim().slice(0, 120)
+        : "AI 联网整理，仅供参考，请以银行、门店和实际回收报价为准。",
+    sections: { bank, jewelry, recycle }
+  };
+}
+
+function countValidPreciousPrices(payload) {
+  const sections = [payload?.sections?.bank, payload?.sections?.jewelry, payload?.sections?.recycle];
+  return sections.reduce((count, section) => {
+    const items = Array.isArray(section?.items) ? section.items : [];
+    return count + items.filter((item) => typeof item?.price === "number" && Number.isFinite(item.price) && item.price > 0).length;
+  }, 0);
+}
+
+function isPlausiblePreciousPrice(sectionKey, item) {
+  const price = item?.price;
+  const unit = typeof item?.unit === "string" ? item.unit : "";
+  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) return false;
+  if (!unit.includes("元/克")) return false;
+  if (item?.metal === "silver") {
+    if (sectionKey === "jewelry") return price >= 2 && price <= 30;
+    return price >= 1 && price <= 20;
+  }
+  if (sectionKey === "jewelry") return price >= 500 && price <= 1500;
+  if (sectionKey === "recycle") return price >= 350 && price <= 1000;
+  return price >= 450 && price <= 1000;
+}
+
+function getPreciousPriceQualityIssues(payload, expectedDate) {
+  const hard = [];
+  const soft = [];
+  const bankItems = Array.isArray(payload?.sections?.bank?.items) ? payload.sections.bank.items : [];
+  const jewelryItems = Array.isArray(payload?.sections?.jewelry?.items) ? payload.sections.jewelry.items : [];
+  const recycleItems = Array.isArray(payload?.sections?.recycle?.items) ? payload.sections.recycle.items : [];
+  const total = countValidPreciousPrices(payload);
+
+  if (!bankItems.length) hard.push("银行金银缺少有效报价");
+  if (!jewelryItems.some((item) => item?.metal === "gold")) hard.push("首饰金缺少有效黄金报价");
+  if (!recycleItems.some((item) => item?.metal === "gold")) hard.push("回收价格缺少有效黄金报价");
+  if (total < 3) hard.push("有效报价少于 3 条");
+
+  const asOf = typeof payload?.asOf === "string" ? payload.asOf.trim() : "";
+  if (!asOf) {
+    soft.push("缺少报价时间");
+  } else if (expectedDate && !asOf.includes(expectedDate)) {
+    soft.push(`报价时间不是今天(${expectedDate})`);
+  }
+
+  for (const [sectionKey, section] of Object.entries(payload?.sections ?? {})) {
+    const items = Array.isArray(section?.items) ? section.items : [];
+    const valid = items.filter((item) => isPlausiblePreciousPrice(sectionKey, item));
+    if (items.length && valid.length !== items.length) {
+      hard.push(`${section?.title ?? sectionKey}含异常价格`);
+    }
+    if (valid.length >= 2) {
+      const uniquePrices = new Set(valid.map((item) => Number(item.price).toFixed(2)));
+      if (uniquePrices.size === 1) soft.push(`${section?.title ?? sectionKey}价格完全相同`);
+    }
+    const missingSourceCount = valid.filter((item) => !item?.source).length;
+    if (valid.length && missingSourceCount >= Math.ceil(valid.length / 2)) {
+      soft.push(`${section?.title ?? sectionKey}来源信息不足`);
+    }
+  }
+
+  return {
+    hard: [...new Set(hard)],
+    soft: [...new Set(soft)]
+  };
+}
+
+function buildPreciousPriceUserText({ beijingNow, beijingToday, repairIssues = [] }) {
+  const lines = [
+    `当前北京时间：${beijingNow}`,
+    `今天中国日期：${beijingToday}`,
+    "任务：联网查询中国大陆今天的贵金属价格，只保留三类：银行金银、首饰金、回收价格。",
+    "优先官方或品牌自有页面；如果没有官方当日报价，再使用主流行情站，但页面必须明确标注今天日期或今天更新时间。",
+    "银行金银优先搜索：工商银行、中国银行、建设银行、农业银行、招商银行的黄金/白银克价。",
+    "首饰金优先搜索：周大福、周生生、六福、老凤祥、老庙的足金挂牌价。",
+    "回收价格优先搜索：黄金回收价，至少返回 1 条黄金回收，可补充白银回收。",
+    "不要使用国际现货、美元/盎司、COMEX、沪金、期货、历史文章、昨日价格、工费或优惠后价格。",
+    "每条记录必须来自你确认与今天日期一致的页面；如果页面没有今天日期或今天更新时间，不要采用。",
+    "price 必须是真实数字，单位统一为元/克，不能写 0，不能估算；无法确认填 null。",
+    "返回前请先自检：日期是今天；来源与分类匹配；价格不是 0；黄金与白银价格处于合理范围。",
+    "必须输出标准 JSON：双引号 key、双引号字符串、不能带 ```、不能带说明文字、不能带注释、不能有尾逗号。",
+    '只返回 JSON：{"asOf":"YYYY-MM-DD HH:mm","disclaimer":"简短提示","sections":{"bank":{"title":"银行金银","items":[{"name":"工商银行 如意金条","metal":"gold","price":768.5,"unit":"元/克","source":"工商银行","note":"官网/当日报价"}]},"jewelry":{"title":"首饰金","items":[{"name":"周大福 足金","metal":"gold","price":892,"unit":"元/克","source":"周大福","note":"官网/当日报价"}]},"recycle":{"title":"回收价格","items":[{"name":"黄金回收","metal":"gold","price":730,"unit":"元/克","source":"回收平台","note":"今日回收价"}]}}}',
+    "source 只写简短来源名，每类最多 3 条。"
+  ];
+  if (repairIssues.length) {
+    lines.splice(
+      2,
+      0,
+      `上一次结果存在这些问题：${repairIssues.join("；")}。请重新联网搜索并修正后再返回。`
+    );
+  }
+  return lines.join("\n");
+}
 
 export function registerApiRoutes(app, db) {
 app.get("/api/health", (_req, res) => {
@@ -149,6 +538,208 @@ app.get("/api/widgets/daily-menu", (req, res) => {
   }
 });
 
+app.post("/api/widgets/ai-precious-prices", async (req, res) => {
+  let localId = "";
+  let vendorForLog = "";
+  let modelForLog = "";
+  let startedAt = 0;
+  try {
+    startedAt = Date.now();
+    localId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(12).toString("hex");
+    const body = req.body ?? {};
+    const force = body?.force === true || body?.force === 1 || body?.force === "1";
+    const state = readState(db);
+    const vendor = normalizeTextAiProvider(typeof body?.provider === "string" ? body.provider : typeof body?.vendor === "string" ? body.vendor : state.aiTextProvider);
+    const model = pickPreciousPriceModel(vendor, body?.model, state);
+    const thinking = typeof body?.thinking === "boolean" ? body.thinking : Boolean(state.aiThinking);
+    vendorForLog = vendor;
+    modelForLog = model;
+    const nowTs = Date.now();
+    const beijingToday = formatYmdInTimeZone(nowTs, "Asia/Shanghai");
+    const beijingNow = formatYmdHmInTimeZone(nowTs, "Asia/Shanghai");
+    const cacheKey = `${vendor}:${model}:thinking:${thinking ? 1 : 0}:date:${beijingToday}`;
+    if (!force && aiPreciousPriceCache.payload && aiPreciousPriceCache.key === cacheKey && Date.now() - aiPreciousPriceCache.at < AI_PRECIOUS_PRICE_CACHE_MS) {
+      res.json({ ...aiPreciousPriceCache.payload, cached: true });
+      return;
+    }
+
+    const system = normalizePrompt(
+      body?.systemPrompt,
+      {
+        fallback:
+          "你是中国贵金属价格助手。你必须联网搜索，只返回严格 JSON，不要输出 markdown、解释或额外文本。",
+        maxLen: 600
+      }
+    );
+    let payload = null;
+    let finalRequestId = "";
+    let finalIssues = [];
+    let finalContentPreview = "";
+
+    for (let contentAttempt = 0; contentAttempt < 2; contentAttempt++) {
+      const userText = buildPreciousPriceUserText({
+        beijingNow,
+        beijingToday,
+        repairIssues: contentAttempt > 0 ? finalIssues : []
+      });
+
+      let aiRes = null;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          aiRes = await requestTextAi({
+            provider: vendor,
+            model,
+            system,
+            userText,
+            thinking,
+            timeoutMs: vendor === "zhipu" ? 40_000 : 25_000,
+            temperature: 0.1,
+            topP: 0.4,
+            maxTokens: 800,
+            responseFormat: "json_object",
+            search: true
+          });
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const stCode = err?.cause?.status;
+          const name = String(err?.name ?? "");
+          const msg = String(err?.message ?? "").toLowerCase();
+          const retryable = name === "AbortError" || msg.includes("timeout") || stCode === 429 || stCode === 500 || stCode === 502 || stCode === 503 || stCode === 504;
+          if (retryable) {
+            await sleepMs(500 * (attempt + 1));
+            continue;
+          }
+          break;
+        }
+      }
+      if (!aiRes) throw lastErr ?? new Error("upstream error");
+
+      const requestId = extractAiRequestId(aiRes);
+      finalRequestId = requestId;
+      const content = extractAiText(aiRes);
+      finalContentPreview = content.slice(0, 1200);
+      if (!content) {
+        logEvent(db, "error", "ai:precious_prices:empty", {
+          localId,
+          vendor,
+          model,
+          requestId,
+          contentAttempt
+        });
+        if (contentAttempt === 0) {
+          finalIssues = ["AI 返回为空"];
+          continue;
+        }
+        res.status(502).json({ error: "AI 返回为空", requestId });
+        return;
+      }
+
+      const parsed = parseLooseJsonObject(content);
+      if (!parsed) {
+        logEvent(db, "error", "ai:precious_prices:bad_json", {
+          localId,
+          vendor,
+          model,
+          requestId,
+          contentAttempt,
+          preview: finalContentPreview
+        });
+        if (contentAttempt === 0) {
+          finalIssues = ["返回内容不是合法 JSON"];
+          continue;
+        }
+        throw new Error("AI 返回格式异常，未解析到 JSON");
+      }
+
+      const normalized = normalizeAiPreciousPricePayload(parsed);
+      const { hard, soft } = getPreciousPriceQualityIssues(normalized, beijingToday);
+      finalIssues = [...hard, ...soft];
+      if (!hard.length && (!soft.length || contentAttempt > 0)) {
+        payload = {
+          vendor,
+          model,
+          thinking,
+          source: "AI 联网查询",
+          asOf: normalized.asOf || null,
+          updatedAt: Date.now(),
+          cached: false,
+          disclaimer: normalized.disclaimer,
+          sections: normalized.sections,
+          requestId
+        };
+        break;
+      }
+
+      logEvent(db, "warn", "ai:precious_prices:quality_retry", {
+        localId,
+        vendor,
+        model,
+        requestId,
+        contentAttempt,
+        hard,
+        soft
+      });
+
+      if (contentAttempt === 0) continue;
+
+      if (hard.length) {
+        throw new Error("AI 返回价格可信度不足，请稍后重试");
+      }
+
+      payload = {
+        vendor,
+        model,
+        thinking,
+        source: "AI 联网查询",
+        asOf: normalized.asOf || null,
+        updatedAt: Date.now(),
+        cached: false,
+        disclaimer: normalized.disclaimer,
+        sections: normalized.sections,
+        requestId
+      };
+      break;
+    }
+
+    if (!payload) {
+      logEvent(db, "error", "ai:precious_prices:no_valid_price", {
+        localId,
+        vendor,
+        model,
+        requestId: finalRequestId,
+        issues: finalIssues,
+        preview: finalContentPreview
+      });
+      throw new Error("AI 未返回足够可靠的价格，请稍后重试");
+    }
+
+    const responsePayload = payload;
+    aiPreciousPriceCache = { at: Date.now(), key: cacheKey, payload: responsePayload };
+    logEvent(db, "info", "ai:precious_prices:ok", { localId, vendor, model, requestId: finalRequestId, ms: Date.now() - startedAt });
+    res.json(responsePayload);
+  } catch (err) {
+    const requestId = typeof err?.cause?.requestId === "string" ? err.cause.requestId : "";
+    const status = typeof err?.cause?.status === "number" ? err.cause.status : undefined;
+    const name = String(err?.name ?? "");
+    const msgLower = String(err?.message ?? "").toLowerCase();
+    const timeoutLike = name === "AbortError" || msgLower.includes("timeout");
+    const friendlyError = timeoutLike ? "AI 查询超时，请稍后再试" : err?.message ?? "金价查询失败";
+    logEvent(db, "error", "ai:precious_prices:error", {
+      localId,
+      vendor: vendorForLog || null,
+      model: modelForLog || null,
+      error: friendlyError,
+      requestId,
+      upstreamStatus: status,
+      ms: startedAt ? Date.now() - startedAt : null
+    });
+    res.status(timeoutLike ? 504 : 502).json({ error: friendlyError, requestId, upstreamStatus: status });
+  }
+});
+
 app.post("/api/widgets/menu-recipe", async (req, res) => {
   let localId = "";
   let vendorForLog = "";
@@ -169,16 +760,10 @@ app.post("/api/widgets/menu-recipe", async (req, res) => {
     }
 
     const st = readState(db);
-    const requestedVendorRaw = typeof body?.vendor === "string" ? body.vendor : st.aiVendor;
-    const vendor = normalizeAiVendor(String(requestedVendorRaw));
+    const requestedVendorRaw = typeof body?.provider === "string" ? body.provider : typeof body?.vendor === "string" ? body.vendor : st.aiTextProvider;
+    const vendor = normalizeTextAiProvider(String(requestedVendorRaw));
     vendorForLog = vendor;
-    const requestedModelRaw = typeof body?.model === "string" ? body.model : "";
-    const requestedModel = String(requestedModelRaw).trim();
-    const model = requestedModel
-      ? normalizeAiModel(requestedModel)
-      : vendor === "aliyun"
-        ? normalizeAiModel(st.aiModelAliyun || DASHSCOPE_MODEL)
-        : normalizeAiModel(st.aiModelZhipu || ZAI_MODEL);
+    const model = resolveTextAiModel(st, vendor, typeof body?.model === "string" ? body.model : "");
     modelForLog = model;
     const thinking = typeof body?.thinking === "boolean" ? body.thinking : false;
     const menuAiTimeoutMs = Math.min(120_000, Math.max(20_000, Number(process.env.MENU_AI_TIMEOUT_MS ?? 65_000) || 65_000));
@@ -198,69 +783,22 @@ app.post("/api/widgets/menu-recipe", async (req, res) => {
       .filter(Boolean)
       .join("\n");
 
-    const callZhipu = async () => {
-      if (!ZAI_API_KEY) {
-        res.status(503).json({ error: "智谱 AI 未配置，请在服务端配置 ZAI_API_KEY。" });
-        return null;
-      }
-      const payload = {
-        model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: userText }
-        ],
-        do_sample: true,
-        temperature: 0.7,
-        top_p: 0.8,
-        stream: false
-      };
-      if (thinking) payload.thinking = { type: "enabled", clear_thinking: true };
-      return await fetchJson("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
-        timeoutMs: menuAiTimeoutMs,
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${ZAI_API_KEY}`
-        },
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
-    };
-
-    const callAliyun = async () => {
-      if (!DASHSCOPE_API_KEY) {
-        res.status(503).json({ error: "阿里云百炼未配置，请在服务端配置 DASHSCOPE_API_KEY。" });
-        return null;
-      }
-      const payload = {
-        model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: userText }
-        ],
-        temperature: 0.7,
-        top_p: 0.8,
-        max_tokens: menuAiMaxTokens,
-        enable_thinking: Boolean(thinking),
-        enable_search: false,
-        stream: false
-      };
-      return await fetchJson(`${DASHSCOPE_BASE_URL}/chat/completions`, {
-        timeoutMs: menuAiTimeoutMs,
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${DASHSCOPE_API_KEY}`
-        },
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
-    };
-
     let aiRes = null;
     let lastErr = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        aiRes = vendor === "aliyun" ? await callAliyun() : await callZhipu();
-        if (!aiRes) return;
+        aiRes = await requestTextAi({
+          provider: vendor,
+          model,
+          system,
+          userText,
+          thinking,
+          timeoutMs: menuAiTimeoutMs,
+          temperature: 0.7,
+          topP: 0.8,
+          maxTokens: menuAiMaxTokens,
+          search: false
+        });
         lastErr = null;
         break;
       } catch (e) {
@@ -278,17 +816,12 @@ app.post("/api/widgets/menu-recipe", async (req, res) => {
     }
     if (!aiRes) throw lastErr ?? new Error("upstream error");
 
-    const content = aiRes?.choices?.[0]?.message?.content;
+    const content = extractAiText(aiRes);
     if (typeof content !== "string" || !content.trim()) {
       res.status(502).json({ error: "AI 返回异常" });
       return;
     }
-    const requestId =
-      typeof aiRes?.request_id === "string"
-        ? aiRes.request_id
-        : typeof aiRes?.id === "string"
-          ? aiRes.id
-          : "";
+    const requestId = extractAiRequestId(aiRes);
     logEvent(db, "info", "ai:menu_recipe:ok", { localId, vendor, model, requestId, ms: Date.now() - startedAt });
     res.json({ vendor, model, content, requestId });
   } catch (err) {
@@ -835,7 +1368,14 @@ app.get("/api/widgets/chowtaifook-prices", async (req, res) => {
     let updatedAt = 0;
     for (const code of codes) {
       const it = parsed?.[code];
-      const price = typeof it?.q1 === "number" ? it.q1 : null;
+      const price =
+        typeof it?.q1 === "number" && it.q1 !== 0
+          ? it.q1
+          : typeof it?.q2 === "number" && it.q2 !== 0
+            ? it.q2
+            : typeof it?.q63 === "number" && it.q63 !== 0
+              ? it.q63
+              : null;
       const name = typeof it?.showName === "string" ? it.showName : null;
       const unit = typeof it?.unit === "string" ? it.unit : null;
       const t = typeof it?.time === "number" ? it.time : 0;

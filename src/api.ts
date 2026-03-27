@@ -1,6 +1,7 @@
 import { MovementEvent } from "./domain/movement";
 import { PregnancyInfo } from "./domain/pregnancy";
 import { WeightRecord } from "./domain/weight";
+import type { TextAiProvider, TextAiProviderState, VisionAiVendor } from "./aiProviders";
 
 export type RemoteState = {
   pregnancyInfo: PregnancyInfo;
@@ -9,7 +10,9 @@ export type RemoteState = {
   updatedAt: number;
   bubbleSpeed: number;
   themeMode: "dark" | "light";
-  aiVendor: "zhipu" | "aliyun";
+  aiTextProvider: TextAiProvider;
+  aiTextProviderStates: Record<TextAiProvider, TextAiProviderState>;
+  aiVendor: VisionAiVendor;
   aiModelZhipu: string;
   aiModelAliyun: string;
   aiSystemPrompt: string;
@@ -81,6 +84,7 @@ export type ChowTaiFookPricesResponse = {
   source: string;
   brand: string;
   updatedDate: string | null;
+  updatedAt?: number | null;
   cached: boolean;
   items: ShopPriceItem[];
 };
@@ -93,6 +97,56 @@ export async function fetchChowTaiFookPrices(opts?: { force?: boolean; signal?: 
   const data = (await res.json()) as ChowTaiFookPricesResponse;
   if (!data || typeof data !== "object") throw new Error("bad response");
   return data;
+}
+
+export type AiPreciousPriceItem = {
+  name: string;
+  metal: "gold" | "silver";
+  price: number | null;
+  unit: string;
+  source?: string;
+  note?: string;
+};
+
+export type AiPreciousPriceSection = {
+  title: string;
+  items: AiPreciousPriceItem[];
+};
+
+export type AiPreciousPricesResponse = {
+  vendor: TextAiProvider;
+  model: string;
+  thinking: boolean;
+  source: string;
+  asOf: string | null;
+  updatedAt: number;
+  cached: boolean;
+  disclaimer: string;
+  requestId?: string;
+  sections: {
+    bank: AiPreciousPriceSection;
+    jewelry: AiPreciousPriceSection;
+    recycle: AiPreciousPriceSection;
+  };
+};
+
+export async function fetchAiPreciousPrices(
+  payload?: { provider?: TextAiProvider; vendor?: TextAiProvider; model?: string; thinking?: boolean; force?: boolean },
+  opts?: { signal?: AbortSignal }
+): Promise<AiPreciousPricesResponse> {
+  const res = await fetch(`/api/widgets/ai-precious-prices`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload ?? {}),
+    signal: opts?.signal
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) {
+    const rid = typeof data?.requestId === "string" && data.requestId ? ` (request_id: ${data.requestId})` : "";
+    throw new Error(typeof data?.error === "string" ? `${data.error}${rid}` : `HTTP ${res.status}${rid}`);
+  }
+  if (!data || typeof data !== "object") throw new Error("bad response");
+  return data as AiPreciousPricesResponse;
 }
 
 export type CngoldPriceItem = {
@@ -176,7 +230,7 @@ export async function fetchDailyMenu(opts?: { date?: string; today?: string; sig
 }
 
 export type MenuRecipeSuggestResponse = {
-  vendor?: "zhipu" | "aliyun";
+  vendor?: TextAiProvider;
   model: string;
   content: string;
   requestId?: string;
@@ -189,7 +243,8 @@ export async function suggestMenuRecipe(
     date?: string;
     weekday?: string;
     weekNo?: number;
-    vendor?: "zhipu" | "aliyun";
+    provider?: TextAiProvider;
+    vendor?: TextAiProvider;
     model?: string;
     thinking?: boolean;
     systemPrompt?: string;
@@ -213,7 +268,7 @@ export async function suggestMenuRecipe(
 }
 
 export type FoodCheckResponse = {
-  vendor?: "zhipu" | "aliyun";
+  vendor?: VisionAiVendor;
   model: string;
   content: string;
   requestId?: string;
@@ -223,7 +278,7 @@ export async function checkFoodByPhoto(
   payload: {
     imageBase64: string;
     mimeType: string;
-    vendor?: "zhipu" | "aliyun";
+    vendor?: VisionAiVendor;
     model?: string;
     thinking?: boolean;
     systemPrompt?: string;
@@ -249,7 +304,7 @@ export async function checkFoodByPhoto(
 export async function checkFoodByPhotoBinary(
   payload: {
     blob: Blob;
-    vendor?: "zhipu" | "aliyun";
+    vendor?: VisionAiVendor;
     model?: string;
     thinking?: boolean;
     systemPrompt?: string;
@@ -298,7 +353,7 @@ export async function uploadFoodImage(payload: { blob: Blob }, opts?: { signal?:
 }
 
 export async function checkFoodByImageUrl(
-  payload: { imageUrl: string; vendor?: "zhipu" | "aliyun"; model?: string; thinking?: boolean; systemPrompt?: string; userPrompt?: string },
+  payload: { imageUrl: string; vendor?: VisionAiVendor; model?: string; thinking?: boolean; systemPrompt?: string; userPrompt?: string },
   opts?: { signal?: AbortSignal }
 ): Promise<FoodCheckResponse> {
   const res = await fetch(`/api/widgets/food-check`, {

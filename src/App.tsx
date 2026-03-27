@@ -14,6 +14,8 @@ import { fetchState, pushState } from "./api";
 import { clearAll, loadState, saveState } from "./storage";
 import { navTo } from "./routes";
 import { useHashRoute } from "./useHashRoute";
+import { getActiveTextModel, normalizeTextAiProvider, normalizeTextAiProviderStates } from "./aiProviders";
+import type { TextAiProvider, TextAiProviderState } from "./aiProviders";
 import {
   BottomNav,
   DayDrawer,
@@ -40,6 +42,8 @@ export function App() {
   const suppressSaveRef = useRef(true);
   const [bubbleSpeed, setBubbleSpeed] = useState<number>(() => initialState.bubbleSpeed);
   const [themeMode, setThemeMode] = useState<"dark" | "light">(() => initialState.themeMode);
+  const [aiTextProvider, setAiTextProvider] = useState<TextAiProvider>(() => initialState.aiTextProvider);
+  const [aiTextProviderStates, setAiTextProviderStates] = useState<Record<TextAiProvider, TextAiProviderState>>(() => initialState.aiTextProviderStates);
   const [aiVendor, setAiVendor] = useState<"zhipu" | "aliyun">(() => initialState.aiVendor);
   const [aiModelZhipu, setAiModelZhipu] = useState<string>(() => initialState.aiModelZhipu);
   const [aiModelAliyun, setAiModelAliyun] = useState<string>(() => initialState.aiModelAliyun);
@@ -55,6 +59,49 @@ export function App() {
   const [aiImageTargetKb, setAiImageTargetKb] = useState<number>(() => initialState.aiImageTargetKb);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   const homeRefreshBusyRef = useRef(false);
+
+  function updateTextProviderState(provider: TextAiProvider, updater: (current: TextAiProviderState) => TextAiProviderState) {
+    setAiTextProviderStates((current) => {
+      const normalized = normalizeTextAiProviderStates(current, provider);
+      const nextState = updater(normalized[provider]);
+      return normalizeTextAiProviderStates(
+        {
+          ...normalized,
+          [provider]: {
+            models: nextState.models,
+            defaultTextModel: nextState.defaultTextModel
+          }
+        },
+        provider
+      );
+    });
+  }
+
+  function buildStatePayload(nextUpdatedAt: number) {
+    return {
+      pregnancyInfo,
+      events,
+      weights,
+      bubbleSpeed,
+      themeMode,
+      aiTextProvider,
+      aiTextProviderStates,
+      aiVendor,
+      aiModelZhipu,
+      aiModelAliyun,
+      aiSystemPrompt,
+      aiUserPrompt,
+      aiUserPromptDefault,
+      aiMenuRecipeSystemPrompt,
+      aiMenuRecipePrompt,
+      aiMenuRecipePromptDefault,
+      aiThinking,
+      aiImageBaseUrl,
+      aiImageMode,
+      aiImageTargetKb,
+      updatedAt: nextUpdatedAt
+    };
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = themeMode;
@@ -105,6 +152,7 @@ export function App() {
         ? Math.min(1, Math.max(0.2, remote.bubbleSpeed))
         : initialState.bubbleSpeed;
     const remoteTheme = remote?.themeMode === "light" || remote?.themeMode === "dark" ? remote.themeMode : initialState.themeMode;
+    const remoteAiTextProvider = normalizeTextAiProvider(remote?.aiTextProvider ?? remote?.aiVendor ?? initialState.aiTextProvider);
     const remoteAiVendor = remote?.aiVendor === "zhipu" || remote?.aiVendor === "aliyun" ? remote.aiVendor : initialState.aiVendor;
     const remoteAiModelZhipu =
       typeof remote?.aiModelZhipu === "string" && remote.aiModelZhipu.trim()
@@ -148,12 +196,18 @@ export function App() {
       typeof remote?.aiImageTargetKb === "number" && Number.isFinite(remote.aiImageTargetKb)
         ? Math.min(2000, Math.max(150, Math.round(remote.aiImageTargetKb)))
         : initialState.aiImageTargetKb;
+    const remoteAiTextProviderStates = normalizeTextAiProviderStates(remote?.aiTextProviderStates, remoteAiTextProvider, {
+      provider: remoteAiTextProvider,
+      model: remoteAiTextProvider === "aliyun" ? remoteAiModelAliyun : remoteAiTextProvider === "zhipu" ? remoteAiModelZhipu : ""
+    });
 
     setEvents(remoteEvents);
     setWeights(remoteWeights);
     setPregnancyInfo(remotePreg);
     setBubbleSpeed(remoteBubble);
     setThemeMode(remoteTheme);
+    setAiTextProvider(remoteAiTextProvider);
+    setAiTextProviderStates(remoteAiTextProviderStates);
     setAiVendor(remoteAiVendor);
     setAiModelZhipu(remoteAiModelZhipu);
     setAiModelAliyun(remoteAiModelAliyun);
@@ -180,30 +234,7 @@ export function App() {
       if (typeof remote?.updatedAt === "number" && remote.updatedAt > updatedAt) {
         applyRemoteState(remote);
       } else if (updatedAt > (remote?.updatedAt ?? 0)) {
-        await pushState(
-          {
-            pregnancyInfo,
-            events,
-            weights,
-            bubbleSpeed,
-            themeMode,
-            aiVendor,
-            aiModelZhipu,
-            aiModelAliyun,
-            aiSystemPrompt,
-            aiUserPrompt,
-            aiUserPromptDefault,
-            aiMenuRecipeSystemPrompt,
-            aiMenuRecipePrompt,
-            aiMenuRecipePromptDefault,
-            aiThinking,
-            aiImageBaseUrl,
-            aiImageMode,
-            aiImageTargetKb,
-            updatedAt
-          },
-          ac.signal
-        );
+        await pushState(buildStatePayload(updatedAt), ac.signal);
       }
     } catch {
     } finally {
@@ -222,30 +253,7 @@ export function App() {
         if (typeof remote?.updatedAt === "number" && remote.updatedAt > updatedAt) {
           applyRemoteState(remote);
         } else if (updatedAt > (remote?.updatedAt ?? 0)) {
-          await pushState(
-            {
-              pregnancyInfo,
-              events,
-              weights,
-              bubbleSpeed,
-              themeMode,
-              aiVendor,
-              aiModelZhipu,
-              aiModelAliyun,
-              aiSystemPrompt,
-              aiUserPrompt,
-              aiUserPromptDefault,
-              aiMenuRecipeSystemPrompt,
-              aiMenuRecipePrompt,
-              aiMenuRecipePromptDefault,
-              aiThinking,
-              aiImageBaseUrl,
-              aiImageMode,
-              aiImageTargetKb,
-              updatedAt
-            },
-            ac.signal
-          );
+          await pushState(buildStatePayload(updatedAt), ac.signal);
         }
       } catch {}
       suppressSaveRef.current = false;
@@ -255,78 +263,15 @@ export function App() {
 
   useEffect(() => {
     if (suppressSaveRef.current) {
-      saveState({
-        pregnancyInfo,
-        events,
-        weights,
-        bubbleSpeed,
-        themeMode,
-        aiVendor,
-        aiModelZhipu,
-        aiModelAliyun,
-        aiSystemPrompt,
-        aiUserPrompt,
-        aiUserPromptDefault,
-        aiMenuRecipeSystemPrompt,
-        aiMenuRecipePrompt,
-        aiMenuRecipePromptDefault,
-        aiThinking,
-        aiImageBaseUrl,
-        aiImageMode,
-        aiImageTargetKb,
-        updatedAt
-      });
+      saveState(buildStatePayload(updatedAt));
       return;
     }
     const nextUpdatedAt = Date.now();
     setUpdatedAt(nextUpdatedAt);
-    saveState({
-      pregnancyInfo,
-      events,
-      weights,
-      bubbleSpeed,
-      themeMode,
-      aiVendor,
-      aiModelZhipu,
-      aiModelAliyun,
-      aiSystemPrompt,
-      aiUserPrompt,
-      aiUserPromptDefault,
-      aiMenuRecipeSystemPrompt,
-      aiMenuRecipePrompt,
-      aiMenuRecipePromptDefault,
-      aiThinking,
-      aiImageBaseUrl,
-      aiImageMode,
-      aiImageTargetKb,
-      updatedAt: nextUpdatedAt
-    });
+    saveState(buildStatePayload(nextUpdatedAt));
     const ac = new AbortController();
     const t = window.setTimeout(() => {
-      pushState(
-        {
-          pregnancyInfo,
-          events,
-          weights,
-          bubbleSpeed,
-          themeMode,
-          aiVendor,
-          aiModelZhipu,
-          aiModelAliyun,
-          aiSystemPrompt,
-          aiUserPrompt,
-          aiUserPromptDefault,
-          aiMenuRecipeSystemPrompt,
-          aiMenuRecipePrompt,
-          aiMenuRecipePromptDefault,
-          aiThinking,
-          aiImageBaseUrl,
-          aiImageMode,
-          aiImageTargetKb,
-          updatedAt: nextUpdatedAt
-        },
-        ac.signal
-      ).catch(() => {});
+      pushState(buildStatePayload(nextUpdatedAt), ac.signal).catch(() => {});
     }, 800);
     return () => {
       window.clearTimeout(t);
@@ -338,6 +283,8 @@ export function App() {
     pregnancyInfo,
     bubbleSpeed,
     themeMode,
+    aiTextProvider,
+    aiTextProviderStates,
     aiVendor,
     aiModelZhipu,
     aiModelAliyun,
@@ -382,12 +329,19 @@ export function App() {
     clearAll();
     const nextPreg = defaultPregnancyInfo(new Date());
     const nextUpdatedAt = Date.now();
+    const nextAiTextProvider: TextAiProvider = "zhipu";
+    const nextAiTextProviderStates = normalizeTextAiProviderStates(undefined, nextAiTextProvider, {
+      provider: nextAiTextProvider,
+      model: "glm-4.6v"
+    });
     suppressSaveRef.current = true;
     setEvents([]);
     setWeights([]);
     setPregnancyInfo(nextPreg);
     setBubbleSpeed(0.35);
     setThemeMode("dark");
+    setAiTextProvider(nextAiTextProvider);
+    setAiTextProviderStates(nextAiTextProviderStates);
     setAiVendor("zhipu");
     setAiModelZhipu("glm-4.6v");
     setAiModelAliyun("qwen3.5-plus");
@@ -406,13 +360,15 @@ export function App() {
     setAiImageMode("url");
     setAiImageTargetKb(450);
     setUpdatedAt(nextUpdatedAt);
-    saveState({
+    const clearedState = {
       pregnancyInfo: nextPreg,
       events: [],
       weights: [],
       bubbleSpeed: 0.35,
-      themeMode: "dark",
-      aiVendor: "zhipu",
+      themeMode: "dark" as const,
+      aiTextProvider: nextAiTextProvider,
+      aiTextProviderStates: nextAiTextProviderStates,
+      aiVendor: "zhipu" as const,
       aiModelZhipu: "glm-4.6v",
       aiModelAliyun: "qwen3.5-plus",
       aiSystemPrompt: "你是一个孕妇营养专家",
@@ -425,33 +381,12 @@ export function App() {
       aiMenuRecipePromptDefault: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
       aiThinking: true,
       aiImageBaseUrl: window.location.origin,
-      aiImageMode: "url",
+      aiImageMode: "url" as const,
       aiImageTargetKb: 450,
       updatedAt: nextUpdatedAt
-    });
-    pushState({
-      pregnancyInfo: nextPreg,
-      events: [],
-      weights: [],
-      bubbleSpeed: 0.35,
-      themeMode: "dark",
-      aiVendor: "zhipu",
-      aiModelZhipu: "glm-4.6v",
-      aiModelAliyun: "qwen3.5-plus",
-      aiSystemPrompt: "你是一个孕妇营养专家",
-      aiUserPrompt:
-        "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
-      aiUserPromptDefault:
-        "请根据图片判断这是什么食物/菜品，并回答： \n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。",
-      aiMenuRecipeSystemPrompt: "你是一个孕妇饮食助手，简短输出菜名与配菜。",
-      aiMenuRecipePrompt: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
-      aiMenuRecipePromptDefault: "根据当前食材为孕妇推荐1-3道菜，补充所需食材",
-      aiThinking: true,
-      aiImageBaseUrl: window.location.origin,
-      aiImageMode: "url",
-      aiImageTargetKb: 450,
-      updatedAt: nextUpdatedAt
-    }).catch(() => {});
+    };
+    saveState(clearedState);
+    pushState(clearedState).catch(() => {});
     suppressSaveRef.current = false;
     navTo({ name: "home" });
   }
@@ -462,6 +397,8 @@ export function App() {
     weights?: WeightRecord[];
     bubbleSpeed?: number;
     themeMode?: "dark" | "light";
+    aiTextProvider?: TextAiProvider;
+    aiTextProviderStates?: Record<TextAiProvider, TextAiProviderState>;
     aiVendor?: "zhipu" | "aliyun";
     aiModelZhipu?: string;
     aiModelAliyun?: string;
@@ -484,9 +421,14 @@ export function App() {
         ? Math.min(1, Math.max(0.2, payload.bubbleSpeed))
         : bubbleSpeed;
     const nextThemeMode = payload.themeMode === "light" || payload.themeMode === "dark" ? payload.themeMode : themeMode;
+    const nextAiTextProvider = normalizeTextAiProvider(payload.aiTextProvider ?? aiTextProvider);
     const nextAiVendor = payload.aiVendor === "zhipu" || payload.aiVendor === "aliyun" ? payload.aiVendor : aiVendor;
     const nextAiModelZhipu = typeof payload.aiModelZhipu === "string" && payload.aiModelZhipu.trim() ? payload.aiModelZhipu.trim().slice(0, 64) : aiModelZhipu;
     const nextAiModelAliyun = typeof payload.aiModelAliyun === "string" && payload.aiModelAliyun.trim() ? payload.aiModelAliyun.trim().slice(0, 64) : aiModelAliyun;
+    const nextAiTextProviderStates = normalizeTextAiProviderStates(payload.aiTextProviderStates ?? aiTextProviderStates, nextAiTextProvider, {
+      provider: nextAiTextProvider,
+      model: nextAiTextProvider === "aliyun" ? nextAiModelAliyun : nextAiTextProvider === "zhipu" ? nextAiModelZhipu : getActiveTextModel(nextAiTextProvider, aiTextProviderStates)
+    });
     const nextAiSystemPrompt =
       typeof payload.aiSystemPrompt === "string" && payload.aiSystemPrompt.trim() ? payload.aiSystemPrompt.trim().slice(0, 600) : aiSystemPrompt;
     const nextAiUserPrompt =
@@ -524,6 +466,8 @@ export function App() {
     setPregnancyInfo(nextPreg);
     setBubbleSpeed(nextBubbleSpeed);
     setThemeMode(nextThemeMode);
+    setAiTextProvider(nextAiTextProvider);
+    setAiTextProviderStates(nextAiTextProviderStates);
     setAiVendor(nextAiVendor);
     setAiModelZhipu(nextAiModelZhipu);
     setAiModelAliyun(nextAiModelAliyun);
@@ -538,12 +482,14 @@ export function App() {
     setAiImageMode(nextAiImageMode);
     setAiImageTargetKb(nextAiImageTargetKb);
     setUpdatedAt(nextUpdatedAt);
-    saveState({
+    const restoredState = {
       pregnancyInfo: nextPreg,
       events: nextEvents,
       weights: nextWeights,
       bubbleSpeed: nextBubbleSpeed,
       themeMode: nextThemeMode,
+      aiTextProvider: nextAiTextProvider,
+      aiTextProviderStates: nextAiTextProviderStates,
       aiVendor: nextAiVendor,
       aiModelZhipu: nextAiModelZhipu,
       aiModelAliyun: nextAiModelAliyun,
@@ -558,28 +504,9 @@ export function App() {
       aiImageMode: nextAiImageMode,
       aiImageTargetKb: nextAiImageTargetKb,
       updatedAt: nextUpdatedAt
-    });
-    pushState({
-      pregnancyInfo: nextPreg,
-      events: nextEvents,
-      weights: nextWeights,
-      bubbleSpeed: nextBubbleSpeed,
-      themeMode: nextThemeMode,
-      aiVendor: nextAiVendor,
-      aiModelZhipu: nextAiModelZhipu,
-      aiModelAliyun: nextAiModelAliyun,
-      aiSystemPrompt: nextAiSystemPrompt,
-      aiUserPrompt: nextAiUserPrompt,
-      aiUserPromptDefault: nextAiUserPromptDefault,
-      aiMenuRecipeSystemPrompt: nextAiMenuRecipeSystemPrompt,
-      aiMenuRecipePrompt: nextAiMenuRecipePrompt,
-      aiMenuRecipePromptDefault: nextAiMenuRecipePromptDefault,
-      aiThinking: nextAiThinking,
-      aiImageBaseUrl: nextAiImageBaseUrl,
-      aiImageMode: nextAiImageMode,
-      aiImageTargetKb: nextAiImageTargetKb,
-      updatedAt: nextUpdatedAt
-    }).catch(() => {});
+    };
+    saveState(restoredState);
+    pushState(restoredState).catch(() => {});
     suppressSaveRef.current = false;
     navTo({ name: "home" });
   }
@@ -700,6 +627,8 @@ export function App() {
         />
       ) : route.name === "widgets" ? (
         <WidgetsPage
+          aiTextProvider={aiTextProvider}
+          aiTextProviderStates={aiTextProviderStates}
           aiVendor={aiVendor}
           aiModelZhipu={aiModelZhipu}
           aiModelAliyun={aiModelAliyun}
@@ -724,6 +653,26 @@ export function App() {
           onBubbleSpeedChange={setBubbleSpeed}
           themeMode={themeMode}
           onThemeModeChange={setThemeMode}
+          aiTextProvider={aiTextProvider}
+          onAiTextProviderChange={(provider) => setAiTextProvider(normalizeTextAiProvider(provider))}
+          aiTextProviderStates={aiTextProviderStates}
+          onAiTextModelChange={(provider, model) =>
+            updateTextProviderState(provider, (current) => {
+              const normalizedModel = model.trim().slice(0, 120);
+              const models = [normalizedModel, ...current.models].filter(Boolean);
+              return {
+                models: Array.from(new Set(models)),
+                defaultTextModel: normalizedModel || current.defaultTextModel
+              };
+            })
+          }
+          onAiTextModelsChange={(provider, models) =>
+            updateTextProviderState(provider, (current) => {
+              const nextModels = Array.from(new Set(models.map((item) => item.trim().slice(0, 120)).filter(Boolean)));
+              const defaultTextModel = nextModels.includes(current.defaultTextModel) ? current.defaultTextModel : nextModels[0] ?? "";
+              return { models: defaultTextModel ? Array.from(new Set([defaultTextModel, ...nextModels])) : nextModels, defaultTextModel };
+            })
+          }
           aiVendor={aiVendor}
           onAiVendorChange={setAiVendor}
           aiModelZhipu={aiModelZhipu}

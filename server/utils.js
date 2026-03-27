@@ -204,6 +204,36 @@ export function formatYmdFromUtcMs(ts) {
   return `${y}-${mm}-${dd}`;
 }
 
+function formatPartsInTimeZone(ts, timeZone) {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).formatToParts(new Date(ts));
+  const get = (type) => parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute")
+  };
+}
+
+export function formatYmdInTimeZone(ts, timeZone) {
+  const { year, month, day } = formatPartsInTimeZone(ts, timeZone);
+  return `${year}-${month}-${day}`;
+}
+
+export function formatYmdHmInTimeZone(ts, timeZone) {
+  const { year, month, day, hour, minute } = formatPartsInTimeZone(ts, timeZone);
+  return `${year}-${month}-${day} ${hour}:${minute}`;
+}
+
 export function loadDailyMenuData() {
   if (!fs.existsSync(DAILY_MENU_JSON)) {
     throw new Error(`menu data file not found: ${DAILY_MENU_JSON}`);
@@ -225,4 +255,3 @@ export function loadDailyMenuData() {
   dailyMenuDataCache = { mtimeMs, payload };
   return { payload, cached: false };
 }
-

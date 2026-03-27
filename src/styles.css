@@ -1924,6 +1924,257 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.metalAiWrap {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.metalAiToolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metalAiToolbarInfo {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.metalAiToolbarActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.metalAiMiniBtn {
+  min-width: 76px;
+}
+
+.metalAiRefreshBtn {
+  min-height: 60px;
+}
+
+.metalAiBoard {
+  display: grid;
+  gap: 12px;
+}
+
+.metalAiSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metalAiSummaryCard {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+}
+
+.metalAiSummaryLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.metalAiSummaryValue {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.metalAiSummaryHint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.metalAiMetaCard,
+.metalAiSection {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.metalAiMetaCard {
+  padding: 12px 14px;
+}
+
+.metalAiMetaTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.metalAiMetaTitle {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.metalAiMetaTag {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(var(--pink-rgb), 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.metalAiMetaText {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.metalAiSectionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.metalAiSection {
+  padding: 12px;
+}
+
+.metalAiSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.metalAiSectionTitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.metalAiSectionCaption {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.metalAiSectionCount {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.metalAiList {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.metalAiItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.metalAiItemMain {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.metalAiBadge {
+  flex-shrink: 0;
+  min-width: 42px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.metalAiBadgeGold {
+  background: rgba(255, 208, 86, 0.16);
+  color: rgba(255, 223, 131, 0.96);
+  border: 1px solid rgba(255, 208, 86, 0.2);
+}
+
+.metalAiBadgeSilver {
+  background: rgba(173, 188, 212, 0.16);
+  color: rgba(222, 230, 242, 0.94);
+  border: 1px solid rgba(173, 188, 212, 0.2);
+}
+
+.metalAiItemText {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.metalAiItemName {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.metalAiItemMeta {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.metalAiItemPrice {
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.metalAiEmpty,
+.metalAiPlaceholder,
+.metalAiFootnote {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.metalAiEmpty {
+  margin-top: 10px;
+}
+
+@media (max-width: 420px) {
+  .metalAiToolbar,
+  .metalAiMetaTop,
+  .metalAiSectionHead,
+  .metalAiItem {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .metalAiSummaryGrid,
+  .metalAiSectionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .metalAiItemPrice {
+    width: 100%;
+  }
+}
+
 .priceTableWrap {
   width: 100%;
   overflow: auto;
@@ -2509,6 +2760,39 @@ button {
 
 :root[data-theme="light"] .btnDesc {
   color: rgba(0, 0, 0, 0.62);
+}
+
+:root[data-theme="light"] .metalAiMetaCard,
+:root[data-theme="light"] .metalAiSummaryCard,
+:root[data-theme="light"] .metalAiSection,
+:root[data-theme="light"] .metalAiItem {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+:root[data-theme="light"] .metalAiMetaTag {
+  color: rgba(190, 24, 93, 0.96);
+  background: rgba(244, 114, 182, 0.1);
+}
+
+:root[data-theme="light"] .metalAiMetaText,
+:root[data-theme="light"] .metalAiSummaryLabel,
+:root[data-theme="light"] .metalAiSummaryHint,
+:root[data-theme="light"] .metalAiSectionCaption,
+:root[data-theme="light"] .metalAiSectionCount,
+:root[data-theme="light"] .metalAiItemMeta,
+:root[data-theme="light"] .metalAiEmpty,
+:root[data-theme="light"] .metalAiPlaceholder,
+:root[data-theme="light"] .metalAiFootnote {
+  color: rgba(0, 0, 0, 0.58);
+}
+
+:root[data-theme="light"] .metalAiBadgeGold {
+  color: rgba(146, 64, 14, 0.94);
+}
+
+:root[data-theme="light"] .metalAiBadgeSilver {
+  color: rgba(51, 65, 85, 0.94);
 }
 
 :root[data-theme="light"] .weightAxis,

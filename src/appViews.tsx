@@ -26,7 +26,10 @@ import {
 import { clearAll, loadState, saveState } from "./storage";
 import { navTo, Route, toHash } from "./routes";
 import { useHashRoute } from "./useHashRoute";
-import { checkFoodByImageUrl, checkFoodByPhotoBinary, uploadFoodImage, CngoldPriceItem, CngoldPricesResponse, DailyMenuMeal, DailyMenuResponse, fetchCngoldPrices, fetchDailyMenu, fetchState, pushState, postClientLog, suggestMenuRecipe } from "./api";
+import { checkFoodByImageUrl, checkFoodByPhotoBinary, uploadFoodImage, DailyMenuMeal, DailyMenuResponse, fetchCngoldPrices, fetchDailyMenu, postClientLog, suggestMenuRecipe } from "./api";
+import type { CngoldPriceItem, CngoldPricesResponse } from "./api";
+import { getActiveTextModel, TEXT_AI_PROVIDER_CODES, TEXT_AI_PROVIDER_PRESETS } from "./aiProviders";
+import type { TextAiProvider, TextAiProviderState } from "./aiProviders";
 
 function Icon({ name }: { name: "calendar" | "bell" | "home" | "chart" | "grid" | "user" | "chev" }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", xmlns: "http://www.w3.org/2000/svg" };
@@ -1647,6 +1650,11 @@ export function MinePage({
   onBubbleSpeedChange,
   themeMode,
   onThemeModeChange,
+  aiTextProvider,
+  onAiTextProviderChange,
+  aiTextProviderStates,
+  onAiTextModelChange,
+  onAiTextModelsChange,
   aiVendor,
   onAiVendorChange,
   aiModelZhipu,
@@ -1685,6 +1693,8 @@ export function MinePage({
     weights?: WeightRecord[];
     bubbleSpeed?: number;
     themeMode?: "dark" | "light";
+    aiTextProvider?: TextAiProvider;
+    aiTextProviderStates?: Record<TextAiProvider, TextAiProviderState>;
     aiVendor?: "zhipu" | "aliyun";
     aiModelZhipu?: string;
     aiModelAliyun?: string;
@@ -1704,6 +1714,11 @@ export function MinePage({
   onBubbleSpeedChange: (v: number) => void;
   themeMode: "dark" | "light";
   onThemeModeChange: (v: "dark" | "light") => void;
+  aiTextProvider: TextAiProvider;
+  onAiTextProviderChange: (v: TextAiProvider) => void;
+  aiTextProviderStates: Record<TextAiProvider, TextAiProviderState>;
+  onAiTextModelChange: (provider: TextAiProvider, model: string) => void;
+  onAiTextModelsChange: (provider: TextAiProvider, models: string[]) => void;
   aiVendor: "zhipu" | "aliyun";
   onAiVendorChange: (v: "zhipu" | "aliyun") => void;
   aiModelZhipu: string;
@@ -1740,6 +1755,21 @@ export function MinePage({
     "请根据图片判断这是什么食物/菜品，并回答：\n 1) 孕妇能不能吃 \n 2) 如果不能或不建议：说明主要危害与原因。 \n 3) 如果可以：给出食品可以提供的营养与好处，以及每天可以食用的量。 \n 输出用中文分点，尽量简洁。";
   const defaultMenuRecipeSystemPrompt = "你是一个孕妇饮食助手，简短输出菜名与配菜。";
   const defaultMenuRecipePrompt = "根据当前食材为孕妇推荐1-3道菜，补充所需食材";
+  const [textModelDraft, setTextModelDraft] = useState("");
+  const currentTextProviderState = aiTextProviderStates[aiTextProvider];
+  const currentTextModel = getActiveTextModel(aiTextProvider, aiTextProviderStates);
+
+  function addTextModel() {
+    const model = textModelDraft.trim();
+    if (!model) return;
+    onAiTextModelChange(aiTextProvider, model);
+    setTextModelDraft("");
+  }
+
+  function removeTextModel(model: string) {
+    const nextModels = (currentTextProviderState?.models ?? []).filter((item) => item !== model);
+    onAiTextModelsChange(aiTextProvider, nextModels);
+  }
 
   function exportBackup() {
     const payload = {
@@ -1750,6 +1780,8 @@ export function MinePage({
       weights,
       bubbleSpeed,
       themeMode,
+      aiTextProvider,
+      aiTextProviderStates,
       aiVendor,
       aiModelZhipu,
       aiModelAliyun,
@@ -1790,6 +1822,8 @@ export function MinePage({
     const wts = parsed?.weights;
     const bs = parsed?.bubbleSpeed;
     const tm = parsed?.themeMode;
+    const atp = parsed?.aiTextProvider;
+    const atps = parsed?.aiTextProviderStates;
     const av = parsed?.aiVendor;
     const amz = parsed?.aiModelZhipu;
     const ama = parsed?.aiModelAliyun;
@@ -1818,6 +1852,11 @@ export function MinePage({
     const normalizedWeights = normalizeWeightRecords(wts);
     const nextBubbleSpeed = typeof bs === "number" && Number.isFinite(bs) ? Math.min(1, Math.max(0.2, bs)) : undefined;
     const nextThemeMode = tm === "light" || tm === "dark" ? tm : undefined;
+    const nextAiTextProvider = (TEXT_AI_PROVIDER_CODES as string[]).includes(String(atp ?? "").trim().toLowerCase())
+      ? (String(atp).trim().toLowerCase() as TextAiProvider)
+      : undefined;
+    const nextAiTextProviderStates =
+      atps && typeof atps === "object" ? (atps as Record<TextAiProvider, TextAiProviderState>) : undefined;
     const nextAiVendor = av === "zhipu" || av === "aliyun" ? av : undefined;
     const nextAiModelZhipu = typeof amz === "string" && amz.trim() ? amz.trim().slice(0, 64) : undefined;
     const nextAiModelAliyun = typeof ama === "string" && ama.trim() ? ama.trim().slice(0, 64) : undefined;
@@ -1833,6 +1872,7 @@ export function MinePage({
     const nextAiImageTargetKb = typeof atk === "number" && Number.isFinite(atk) ? Math.min(2000, Math.max(150, Math.round(atk))) : undefined;
     if (nextBubbleSpeed != null) onBubbleSpeedChange(nextBubbleSpeed);
     if (nextThemeMode) onThemeModeChange(nextThemeMode);
+    if (nextAiTextProvider) onAiTextProviderChange(nextAiTextProvider);
     if (nextAiVendor) onAiVendorChange(nextAiVendor);
     if (nextAiModelZhipu) onAiModelZhipuChange(nextAiModelZhipu);
     if (nextAiModelAliyun) onAiModelAliyunChange(nextAiModelAliyun);
@@ -1852,6 +1892,8 @@ export function MinePage({
       weights: normalizedWeights,
       bubbleSpeed: nextBubbleSpeed,
       themeMode: nextThemeMode,
+      aiTextProvider: nextAiTextProvider,
+      aiTextProviderStates: nextAiTextProviderStates,
       aiVendor: nextAiVendor,
       aiModelZhipu: nextAiModelZhipu,
       aiModelAliyun: nextAiModelAliyun,
@@ -1914,7 +1956,63 @@ export function MinePage({
               <summary className="detailsSummary">AI 设置</summary>
               <div className="detailsBody">
                 <div className="formRow">
-                  <div className="label">AI 厂商</div>
+                  <div className="label">文本 AI 厂商</div>
+                  <div className="segTabs" role="tablist" aria-label="文本 AI 厂商">
+                    {TEXT_AI_PROVIDER_CODES.map((provider) => (
+                      <button
+                        key={provider}
+                        type="button"
+                        className={`segTab ${aiTextProvider === provider ? "segTabActive" : ""}`}
+                        onClick={() => onAiTextProviderChange(provider)}
+                      >
+                        {TEXT_AI_PROVIDER_PRESETS[provider].label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="hint">
+                    {TEXT_AI_PROVIDER_PRESETS[aiTextProvider].description}
+                    {TEXT_AI_PROVIDER_PRESETS[aiTextProvider].supportsSearch ? " 当前可用于推荐菜等文本任务，模型本身支持联网检索。" : " 当前可用于推荐菜等纯文本任务。"}
+                  </div>
+                </div>
+                <div className="formRow">
+                  <div className="label">文本 AI 模型</div>
+                  <div className="segTabs" role="tablist" aria-label="文本 AI 模型">
+                    {(currentTextProviderState?.models ?? []).map((model) => (
+                      <button
+                        key={model}
+                        type="button"
+                        className={`segTab ${currentTextModel === model ? "segTabActive" : ""}`}
+                        onClick={() => onAiTextModelChange(aiTextProvider, model)}
+                      >
+                        {model}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="promptActionRow">
+                    <input
+                      className="input"
+                      type="text"
+                      value={textModelDraft}
+                      placeholder="添加自定义模型名"
+                      onChange={(e) => setTextModelDraft(e.target.value)}
+                    />
+                    <button className="miniBtn promptActionBtn" type="button" onClick={addTextModel}>
+                      添加模型
+                    </button>
+                  </div>
+                  {currentTextProviderState?.models?.length ? (
+                    <div className="promptActionRow">
+                      {currentTextProviderState.models.map((model) => (
+                        <button key={`remove-${model}`} className="miniBtn promptActionBtn" type="button" onClick={() => removeTextModel(model)}>
+                          删除 {model}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="hint">当前默认模型：{currentTextModel || "未设置"}</div>
+                </div>
+                <div className="formRow">
+                  <div className="label">识图 AI 厂商</div>
                   <div className="segTabs" role="tablist" aria-label="AI 厂商">
                     <button
                       type="button"
@@ -1931,10 +2029,10 @@ export function MinePage({
                       阿里云
                     </button>
                   </div>
-                  <div className="hint">用于“拍照问 AI”。可在不同厂商之间切换。</div>
+                  <div className="hint">用于“拍照问 AI”的视觉识别模型。</div>
                 </div>
                 <div className="formRow">
-                  <div className="label">AI 模型</div>
+                  <div className="label">识图 AI 模型</div>
                   {aiVendor === "zhipu" ? (
                     <div className="segTabs" role="tablist" aria-label="智谱模型">
                       <button
@@ -2247,6 +2345,8 @@ export function MinePage({
 }
 
 export function WidgetsPage({
+  aiTextProvider,
+  aiTextProviderStates,
   aiVendor,
   aiModelZhipu,
   aiModelAliyun,
@@ -2259,6 +2359,8 @@ export function WidgetsPage({
   aiImageMode,
   aiImageTargetKb
 }: {
+  aiTextProvider: TextAiProvider;
+  aiTextProviderStates: Record<TextAiProvider, TextAiProviderState>;
   aiVendor: "zhipu" | "aliyun";
   aiModelZhipu: string;
   aiModelAliyun: string;
@@ -2271,9 +2373,9 @@ export function WidgetsPage({
   aiImageMode: "url" | "inline";
   aiImageTargetKb: number;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<CngoldPricesResponse | null>(null);
+  const [goldLoading, setGoldLoading] = useState(false);
+  const [goldError, setGoldError] = useState<string | null>(null);
+  const [goldData, setGoldData] = useState<CngoldPricesResponse | null>(null);
   const foodFileRef = useRef<HTMLInputElement | null>(null);
   const [foodBusy, setFoodBusy] = useState(false);
   const [foodError, setFoodError] = useState<string | null>(null);
@@ -2291,25 +2393,20 @@ export function WidgetsPage({
   const [menuRecipeBusyKey, setMenuRecipeBusyKey] = useState<string | null>(null);
   const menuRecipeStreamTokenRef = useRef(0);
   const menuRecipeReqAbortRef = useRef<AbortController | null>(null);
-
-  const fmt = (n: number | null | undefined, digits?: number | null) => {
-    if (n == null || !Number.isFinite(n)) return "-";
-    const d = typeof digits === "number" && Number.isFinite(digits) ? digits : 2;
-    return d <= 0 ? String(Math.round(n)) : n.toFixed(d);
+  const goldAutoLoadRef = useRef(false);
+  const currentTextModel = getActiveTextModel(aiTextProvider, aiTextProviderStates);
+  const currentVisionModel = aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu;
+  const fmtPreciousPrice = (price: number | null | undefined, unit = "元/克") => {
+    if (price == null || !Number.isFinite(price)) return "--";
+    return `${price >= 100 ? price.toFixed(0) : price.toFixed(2)} ${unit}`;
   };
-
-  const fmtPercent = (n: number | null | undefined, digits?: number | null) => {
-    if (n == null || !Number.isFinite(n)) return "-";
-    const d = typeof digits === "number" && Number.isFinite(digits) ? Math.min(4, Math.max(0, digits)) : 2;
-    return `${n.toFixed(d)}%`;
-  };
-
-  const fmtTime = (ts: number | null | undefined) => {
-    if (!ts) return "-";
+  const fmtMetalAsOf = (value: string | null | undefined, ts?: number | null) => {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (!ts) return "刚刚";
     try {
       return new Date(ts).toLocaleString();
     } catch {
-      return "-";
+      return "刚刚";
     }
   };
 
@@ -2343,26 +2440,111 @@ export function WidgetsPage({
 
   const [open, setOpen] = useState(false);
 
-  async function load(force: boolean) {
-    setLoading(true);
-    setError(null);
+  async function loadGold(force: boolean) {
+    setGoldLoading(true);
+    setGoldError(null);
     const ac = new AbortController();
     try {
       const res = await fetchCngoldPrices({ force, signal: ac.signal });
-      setData(res);
+      setGoldData(res);
     } catch (err: any) {
-      setError(err?.message ?? "获取失败");
+      setGoldError(err?.message ?? "获取失败");
     } finally {
-      setLoading(false);
+      setGoldLoading(false);
       ac.abort();
     }
   }
 
   useEffect(() => {
-    if (open && !data && !loading) {
-      void load(false);
-    }
+    if (!open || goldLoading || goldData || goldAutoLoadRef.current) return;
+    goldAutoLoadRef.current = true;
+    void loadGold(false);
+  }, [open, goldLoading, goldData]);
+
+  useEffect(() => {
+    if (open) return;
+    goldAutoLoadRef.current = false;
   }, [open]);
+
+  const cleanGoldLabel = (value: string) =>
+    String(value ?? "")
+      .replace(/\s*参考.*$/, "")
+      .replace(/\s*----.*$/, "")
+      .replace(/\(内地\)/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const validGoldRows = (rows?: CngoldPriceItem[]) =>
+    (rows ?? []).filter((item) => Number.isFinite(item?.price) && (item?.price ?? 0) > 0 && /元\/克/.test(String(item?.unit ?? "")));
+
+  const bankRows = useMemo(() => {
+    return validGoldRows(goldData?.sections?.bars?.items)
+      .map((item) => ({
+        name: cleanGoldLabel(item.label),
+        meta: "银行/金条参考价",
+        price: item.price,
+        unit: item.unit,
+        metal: "gold" as const
+      }))
+      .sort((a, b) => a.price - b.price)
+      .slice(0, 6);
+  }, [goldData]);
+
+  const jewelryRows = useMemo(() => {
+    return validGoldRows(goldData?.sections?.shops?.items)
+      .filter((item) => /(黄金价格|饰品金价|足金)/.test(item.label) && !/(铂金|金条|香港)/.test(item.label))
+      .map((item) => ({
+        name: cleanGoldLabel(item.label).replace(/\s*(黄金价格|饰品金价|足金)$/, "").trim(),
+        meta: "品牌首饰金挂牌价",
+        price: item.price,
+        unit: item.unit,
+        metal: "gold" as const
+      }))
+      .sort((a, b) => a.price - b.price)
+      .slice(0, 6);
+  }, [goldData]);
+
+  const recycleRows = useMemo(() => {
+    const picked = new Map<string, { name: string; meta: string; price: number; unit: string; metal: "gold" | "silver" }>();
+    for (const item of validGoldRows(goldData?.sections?.recycle?.items)) {
+      const label = cleanGoldLabel(item.label);
+      if (/K金|铂金/.test(label)) continue;
+      let name = "";
+      let metal: "gold" | "silver" = "gold";
+      if (/黄金回收/.test(label)) {
+        name = "黄金回收";
+        metal = "gold";
+      } else if (/金条回收/.test(label)) {
+        name = "金条回收";
+        metal = "gold";
+      } else if (/白银/.test(label)) {
+        name = "白银回收";
+        metal = "silver";
+      } else if (/银条/.test(label)) {
+        name = "银条回收";
+        metal = "silver";
+      }
+      if (!name) continue;
+      const prev = picked.get(name);
+      if (!prev || item.price > prev.price) {
+        picked.set(name, { name, meta: label, price: item.price, unit: item.unit, metal });
+      }
+    }
+    return ["黄金回收", "金条回收", "白银回收", "银条回收"]
+      .map((name) => picked.get(name))
+      .filter(Boolean) as { name: string; meta: string; price: number; unit: string; metal: "gold" | "silver" }[];
+  }, [goldData]);
+
+  const goldSummaryCards = useMemo(() => {
+    const goldRecycle = recycleRows.find((item) => item.metal === "gold") ?? null;
+    const silverRecycle = recycleRows.find((item) => item.metal === "silver") ?? null;
+    return [
+      { label: "银行金条低位", item: bankRows[0] ?? null },
+      { label: "首饰金低位", item: jewelryRows[0] ?? null },
+      { label: "黄金回收", item: goldRecycle },
+      { label: "白银回收", item: silverRecycle }
+    ];
+  }, [bankRows, jewelryRows, recycleRows]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -2536,7 +2718,7 @@ export function WidgetsPage({
     setFoodBusy(true);
     setFoodError(null);
     try {
-      const model = aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu;
+      const model = currentVisionModel;
       const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
       let done = false;
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -2598,7 +2780,7 @@ export function WidgetsPage({
       void postClientLog({
         event: "food_submit_error",
         level: err?.name === "AbortError" ? "warn" : "error",
-        data: { vendor: aiVendor, model: aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu, mode: aiImageMode, bytes: foodBlob.size, name: err?.name ?? "", message: err?.message ?? "" }
+        data: { vendor: aiVendor, model: currentVisionModel, mode: aiImageMode, bytes: foodBlob.size, name: err?.name ?? "", message: err?.message ?? "" }
       });
       setFoodError(msg);
     } finally {
@@ -2641,7 +2823,7 @@ export function WidgetsPage({
     setMenuRecipeByKey((prev) => ({ ...prev, [key]: "" }));
 
     try {
-      const model = aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu;
+      const model = currentTextModel;
       const ans = await suggestMenuRecipe(
         {
           meal: item.meal || "",
@@ -2649,7 +2831,7 @@ export function WidgetsPage({
           date: menuData.selectedDate,
           weekday: menuData.weekday,
           weekNo: menuData.weekNo,
-          vendor: aiVendor,
+          provider: aiTextProvider,
           model,
           thinking: false,
           systemPrompt: aiMenuRecipeSystemPrompt,
@@ -2672,7 +2854,7 @@ export function WidgetsPage({
       void postClientLog({
         event: "menu_recipe_ok",
         level: "info",
-        data: { vendor: aiVendor, model, meal: item.meal, date: menuData.selectedDate, weekNo: menuData.weekNo }
+        data: { provider: aiTextProvider, model, meal: item.meal, date: menuData.selectedDate, weekNo: menuData.weekNo }
       });
     } catch (err: any) {
       if (err?.name === "AbortError") return;
@@ -2682,7 +2864,7 @@ export function WidgetsPage({
       void postClientLog({
         event: "menu_recipe_error",
         level: "warn",
-        data: { vendor: aiVendor, model: aiVendor === "aliyun" ? aiModelAliyun : aiModelZhipu, meal: item.meal, message: msg }
+        data: { provider: aiTextProvider, model: currentTextModel, meal: item.meal, message: msg }
       });
     } finally {
       if (menuRecipeStreamTokenRef.current === streamToken) {
@@ -2709,6 +2891,46 @@ export function WidgetsPage({
     lunch: "menuMealLunch",
     dinner: "menuMealDinner"
   };
+
+  const renderGoldMarketItem = (
+    item: { name: string; meta: string; price: number; unit: string; metal: "gold" | "silver" },
+    idx: number
+  ) => {
+    const metalText = item.metal === "silver" ? "白银" : "黄金";
+    const metalClass = item.metal === "silver" ? "metalAiBadgeSilver" : "metalAiBadgeGold";
+    return (
+      <div key={`${item.name}-${idx}`} className="metalAiItem">
+        <div className="metalAiItemMain">
+          <span className={`metalAiBadge ${metalClass}`}>{metalText}</span>
+          <div className="metalAiItemText">
+            <div className="metalAiItemName">{item.name}</div>
+            <div className="metalAiItemMeta">{item.meta}</div>
+          </div>
+        </div>
+        <div className="metalAiItemPrice">{fmtPreciousPrice(item.price, item.unit || "元/克")}</div>
+      </div>
+    );
+  };
+
+  const renderGoldMarketSection = (
+    section: { title: string; caption: string; emptyText: string; items: { name: string; meta: string; price: number; unit: string; metal: "gold" | "silver" }[] },
+    key: string
+  ) => (
+    <div key={key} className="metalAiSection">
+      <div className="metalAiSectionHead">
+        <div>
+          <div className="metalAiSectionTitle">{section.title}</div>
+          <div className="metalAiSectionCaption">{section.caption}</div>
+        </div>
+        <div className="metalAiSectionCount">{section.items.length} 条</div>
+      </div>
+      {section.items.length ? (
+        <div className="metalAiList">{section.items.map((item, idx) => renderGoldMarketItem(item, idx))}</div>
+      ) : (
+        <div className="metalAiEmpty">{section.emptyText}</div>
+      )}
+    </div>
+  );
 
   return (
     <div className="page">
@@ -3005,7 +3227,7 @@ export function WidgetsPage({
             >
               <div style={{ textAlign: 'left' }}>
                 <div className="recordTitle">今日金价</div>
-                <div className="recordSub">现货贵金属与金店价格（仅供参考）</div>
+                <div className="recordSub">固定行情源整理银行金条、首饰金与黄金白银回收价</div>
               </div>
               <div style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
                 <Icon name="chev" />
@@ -3013,75 +3235,75 @@ export function WidgetsPage({
             </button>
 
             {open && (
-              <div className="stack" style={{ marginTop: 12 }}>
-                <button className="actionBtn actionBtnPrimary" type="button" onClick={() => void load(true)} disabled={loading}>
-                  <div>
-                    <div className="actionTitle">{loading ? "获取中…" : "获取最新价格"}</div>
-                    <div className="actionSub">金价 / 金店金价 / 金条 / 回收价格</div>
+              <div className="metalAiWrap">
+                <div className="metalAiMetaCard">
+                  <div className="metalAiToolbar">
+                    <div className="metalAiToolbarInfo">
+                      <div className="metalAiMetaTitle">固定数据源</div>
+                      <div className="metalAiMetaText">
+                        {goldData ? `${goldData.source} · ${fmtMetalAsOf(null, goldData.updatedAt)}` : "展开后自动拉取，支持手动刷新"}
+                      </div>
+                    </div>
+                    <div className="metalAiToolbarActions">
+                      <div className="metalAiMetaTag">{goldData?.cached ? "缓存" : "实时"}</div>
+                      <button className="miniBtn metalAiMiniBtn" type="button" onClick={() => void loadGold(true)} disabled={goldLoading}>
+                        {goldLoading ? "刷新中…" : "刷新"}
+                      </button>
+                    </div>
                   </div>
-                </button>
+                </div>
 
-                {error ? <div className="errorText">{error}</div> : null}
+                {goldError ? <div className="errorText">{goldError}</div> : null}
 
-                {data ? (
-                  <div className="stack">
-                    <div className="recordSub">
-                      数据来源：{data.source}
-                      {data.updatedAt ? ` · 更新时间：${new Date(data.updatedAt).toLocaleString()}` : ""}
+                {goldData ? (
+                  <div className="metalAiBoard">
+                    <div className="metalAiSummaryGrid">
+                      {goldSummaryCards.map((card) => (
+                        <div key={card.label} className="metalAiSummaryCard">
+                          <div className="metalAiSummaryLabel">{card.label}</div>
+                          <div className="metalAiSummaryValue">{fmtPreciousPrice(card.item?.price, card.item?.unit ?? "元/克")}</div>
+                          <div className="metalAiSummaryHint">{card.item?.name ?? "暂无数据"}</div>
+                        </div>
+                      ))}
                     </div>
 
-                    {(["shops", "bars", "recycle"] as const).map((k) => {
-                      const sec = data.sections[k];
-                      const items = sec.items ?? [];
-                      const limit = k === "bars" ? 3 : 8;
-                      const rows = items.slice(0, limit);
+                    <div className="metalAiSectionGrid">
+                      {renderGoldMarketSection(
+                        {
+                          title: "银行金条",
+                          caption: "优先展示主流银行与投资金条",
+                          emptyText: "暂未拉到银行金条价格",
+                          items: bankRows
+                        },
+                        "bank"
+                      )}
+                      {renderGoldMarketSection(
+                        {
+                          title: "首饰金",
+                          caption: "展示主流品牌挂牌首饰金",
+                          emptyText: "暂未拉到首饰金价格",
+                          items: jewelryRows
+                        },
+                        "jewelry"
+                      )}
+                      {renderGoldMarketSection(
+                        {
+                          title: "回收价格",
+                          caption: "仅保留黄金与白银回收参考",
+                          emptyText: "暂未拉到回收报价",
+                          items: recycleRows
+                        },
+                        "recycle"
+                      )}
+                    </div>
 
-                      const Table = ({ rows }: { rows: CngoldPriceItem[] }) => (
-                        <div className="priceTableWrap">
-                          <table className="priceTable">
-                            <thead>
-                              <tr>
-                                <th>名称</th>
-                                <th>最新价</th>
-                                <th>昨收价</th>
-                                <th>更新时间</th>
-                                <th>单位</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rows.map((it) => {
-                                let label = it.label;
-                                if (k === "bars") {
-                                  if (label.includes("建行")) label = "建设银行";
-                                  else if (label.includes("中行")) label = "中国银行";
-                                  else if (label.includes("工行")) label = "工商银行";
-                                }
-                                return (
-                                  <tr key={it.code}>
-                                    <td className="priceName">{label}</td>
-                                    <td className="priceNum">{fmt(it.price, it.digits)}</td>
-                                    <td className="priceNum">{fmt(it.prevClose, it.digits)}</td>
-                                    <td className="priceTime">{fmtTime(it.updatedAt)}</td>
-                                    <td className="priceUnit">{it.unit}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-
-                      return (
-                        <div key={k} className="stack">
-                          <div className="recordTitle">{sec.title}</div>
-                          <Table rows={rows} />
-                        </div>
-                      );
-                    })}
+                    <div className="metalAiFootnote">固定行情源整理，仅供参考，请以银行、品牌门店与实际回收报价为准。</div>
+                  </div>
+                ) : !goldLoading ? (
+                  <div className="metalAiPlaceholder">
+                    展开后会读取固定行情源，保留银行金条、首饰金与黄金白银回收价。
                   </div>
                 ) : null}
-
-                <div className="recordSub">提示：以上数据仅供参考，请以实际成交/门店为准。</div>
               </div>
             )}
           </div>

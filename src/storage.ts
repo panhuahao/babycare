@@ -1,6 +1,13 @@
 import { MovementEvent } from "./domain/movement";
 import { PregnancyInfo } from "./domain/pregnancy";
 import { normalizeWeightRecords, WeightRecord } from "./domain/weight";
+import {
+  normalizeAiModelName,
+  normalizeTextAiProvider,
+  normalizeTextAiProviderStates,
+  normalizeVisionAiVendor
+} from "./aiProviders";
+import type { TextAiProvider, TextAiProviderState, VisionAiVendor } from "./aiProviders";
 
 const KEY_EVENTS = "bbcare:movementEvents:v1";
 const KEY_PREG = "bbcare:pregnancyInfo:v1";
@@ -8,6 +15,8 @@ const KEY_WEIGHTS = "bbcare:weightRecords:v1";
 const KEY_STATE = "bbcare:state:v2";
 const KEY_BUBBLE_SPEED = "bbcare:bubbleSpeed";
 const KEY_THEME_MODE = "bbcare:themeMode";
+const KEY_AI_TEXT_PROVIDER = "bbcare:aiTextProvider";
+const KEY_AI_TEXT_PROVIDER_STATES = "bbcare:aiTextProviderStates";
 const KEY_AI_VENDOR = "bbcare:aiVendor";
 const KEY_AI_MODEL_ZHIPU = "bbcare:aiModelZhipu";
 const KEY_AI_MODEL_ALIYUN = "bbcare:aiModelAliyun";
@@ -35,7 +44,9 @@ export type AppState = {
   updatedAt: number;
   bubbleSpeed: number;
   themeMode: "dark" | "light";
-  aiVendor: "zhipu" | "aliyun";
+  aiTextProvider: TextAiProvider;
+  aiTextProviderStates: Record<TextAiProvider, TextAiProviderState>;
+  aiVendor: VisionAiVendor;
   aiModelZhipu: string;
   aiModelAliyun: string;
   aiSystemPrompt: string;
@@ -50,16 +61,8 @@ export type AppState = {
   aiImageTargetKb: number;
 };
 
-function normalizeAiVendor(input: unknown): "zhipu" | "aliyun" {
-  const v = typeof input === "string" ? input.trim().toLowerCase() : "";
-  if (v === "aliyun" || v === "dashscope" || v === "bailian") return "aliyun";
-  return "zhipu";
-}
-
 function normalizeAiModel(input: unknown, fallback: string) {
-  const v = typeof input === "string" ? input.trim() : "";
-  if (!v) return fallback;
-  return v.length > 64 ? v.slice(0, 64) : v;
+  return normalizeAiModelName(input, fallback);
 }
 
 function normalizePrompt(input: unknown, fallback: string, maxLen: number) {
@@ -98,7 +101,18 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
           ? Math.min(1, Math.max(0.2, parsed.bubbleSpeed))
           : undefined;
       const tm0 = parsed?.themeMode === "light" || parsed?.themeMode === "dark" ? parsed.themeMode : undefined;
-      const aiVendor = normalizeAiVendor(parsed?.aiVendor);
+      const aiTextProvider = normalizeTextAiProvider(parsed?.aiTextProvider ?? parsed?.aiVendor);
+      const legacyTextModel =
+        aiTextProvider === "aliyun"
+          ? normalizeAiModel(parsed?.aiModelAliyun, "qwen3.5-plus")
+          : aiTextProvider === "zhipu"
+            ? normalizeAiModel(parsed?.aiModelZhipu ?? parsed?.aiModel, "glm-4.6v")
+            : "";
+      const aiTextProviderStates = normalizeTextAiProviderStates(parsed?.aiTextProviderStates, aiTextProvider, {
+        provider: aiTextProvider,
+        model: legacyTextModel
+      });
+      const aiVendor = normalizeVisionAiVendor(parsed?.aiVendor);
       const aiModelZhipu = normalizeAiModel(parsed?.aiModelZhipu ?? parsed?.aiModel, "glm-4.6v");
       const aiModelAliyun = normalizeAiModel(parsed?.aiModelAliyun, "qwen3.5-plus");
       const aiSystemPrompt = normalizePrompt(parsed?.aiSystemPrompt, DEFAULT_SYSTEM_PROMPT, 600);
@@ -124,6 +138,8 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
         updatedAt,
         bubbleSpeed: bs0 ?? 0.35,
         themeMode: tm0 ?? "dark",
+        aiTextProvider,
+        aiTextProviderStates,
         aiVendor,
         aiModelZhipu,
         aiModelAliyun,
@@ -146,7 +162,8 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
   let pregnancyInfo: PregnancyInfo = fallbackPregnancyInfo;
   let bubbleSpeed = 0.35;
   let themeMode: "dark" | "light" = "dark";
-  let aiVendor: "zhipu" | "aliyun" = "zhipu";
+  let aiTextProvider: TextAiProvider = "zhipu";
+  let aiVendor: VisionAiVendor = "zhipu";
   let aiModelZhipu = "glm-4.6v";
   let aiModelAliyun = "qwen3.5-plus";
   let aiSystemPrompt = DEFAULT_SYSTEM_PROMPT;
@@ -160,6 +177,7 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
   let aiImageBaseUrl = origin;
   let aiImageMode: "url" | "inline" = "url";
   let aiImageTargetKb = 450;
+  let aiTextProviderStates = normalizeTextAiProviderStates(undefined, aiTextProvider);
   try {
     const rawEvents = localStorage.getItem(KEY_EVENTS);
     if (rawEvents) events = normalizeEvents(JSON.parse(rawEvents));
@@ -182,16 +200,20 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
     if (raw === "light" || raw === "dark") themeMode = raw;
   } catch {}
   try {
+    const raw = localStorage.getItem(KEY_AI_TEXT_PROVIDER);
+    if (raw) aiTextProvider = normalizeTextAiProvider(raw);
+  } catch {}
+  try {
     const raw = localStorage.getItem(KEY_AI_VENDOR);
-    if (raw) aiVendor = normalizeAiVendor(raw);
+    if (raw) aiVendor = normalizeVisionAiVendor(raw);
   } catch {}
   try {
     const raw = localStorage.getItem(KEY_AI_MODEL_ZHIPU);
-    if (typeof raw === "string" && raw.trim()) aiModelZhipu = raw.trim().slice(0, 64);
+    if (typeof raw === "string" && raw.trim()) aiModelZhipu = normalizeAiModel(raw, "glm-4.6v");
   } catch {}
   try {
     const raw = localStorage.getItem(KEY_AI_MODEL_ALIYUN);
-    if (typeof raw === "string" && raw.trim()) aiModelAliyun = raw.trim().slice(0, 64);
+    if (typeof raw === "string" && raw.trim()) aiModelAliyun = normalizeAiModel(raw, "qwen3.5-plus");
   } catch {}
   try {
     const raw = localStorage.getItem(KEY_AI_SYSTEM_PROMPT);
@@ -223,6 +245,18 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
     else if (raw === "1") aiThinking = true;
   } catch {}
   try {
+    const raw = localStorage.getItem(KEY_AI_TEXT_PROVIDER_STATES);
+    if (raw) {
+      const parsed = JSON.parse(raw) as unknown;
+      const legacyTextModel = aiTextProvider === "aliyun" ? aiModelAliyun : aiTextProvider === "zhipu" ? aiModelZhipu : "";
+      aiTextProviderStates = normalizeTextAiProviderStates(parsed, aiTextProvider, { provider: aiTextProvider, model: legacyTextModel });
+    }
+  } catch {}
+  aiTextProviderStates = normalizeTextAiProviderStates(aiTextProviderStates, aiTextProvider, {
+    provider: aiTextProvider,
+    model: aiTextProvider === "aliyun" ? aiModelAliyun : aiTextProvider === "zhipu" ? aiModelZhipu : ""
+  });
+  try {
     const raw = localStorage.getItem(KEY_AI_IMAGE_BASE_URL);
     if (typeof raw === "string" && raw.trim()) aiImageBaseUrl = raw.trim().replace(/\/+$/, "");
   } catch {}
@@ -243,6 +277,8 @@ export function loadState(fallbackPregnancyInfo: PregnancyInfo): AppState {
     updatedAt: 0,
     bubbleSpeed,
     themeMode,
+    aiTextProvider,
+    aiTextProviderStates,
     aiVendor,
     aiModelZhipu,
     aiModelAliyun,
@@ -266,6 +302,8 @@ export function saveState(state: AppState) {
   localStorage.setItem(KEY_WEIGHTS, JSON.stringify(state.weights));
   localStorage.setItem(KEY_BUBBLE_SPEED, String(state.bubbleSpeed));
   localStorage.setItem(KEY_THEME_MODE, state.themeMode);
+  localStorage.setItem(KEY_AI_TEXT_PROVIDER, state.aiTextProvider);
+  localStorage.setItem(KEY_AI_TEXT_PROVIDER_STATES, JSON.stringify(state.aiTextProviderStates));
   localStorage.setItem(KEY_AI_VENDOR, state.aiVendor);
   localStorage.setItem(KEY_AI_MODEL_ZHIPU, state.aiModelZhipu);
   localStorage.setItem(KEY_AI_MODEL_ALIYUN, state.aiModelAliyun);
@@ -288,6 +326,8 @@ export function clearAll() {
   localStorage.removeItem(KEY_STATE);
   localStorage.removeItem(KEY_BUBBLE_SPEED);
   localStorage.removeItem(KEY_THEME_MODE);
+  localStorage.removeItem(KEY_AI_TEXT_PROVIDER);
+  localStorage.removeItem(KEY_AI_TEXT_PROVIDER_STATES);
   localStorage.removeItem(KEY_AI_VENDOR);
   localStorage.removeItem(KEY_AI_MODEL_ZHIPU);
   localStorage.removeItem(KEY_AI_MODEL_ALIYUN);

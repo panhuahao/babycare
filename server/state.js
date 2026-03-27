@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import Database from "better-sqlite3";
 import { DASHSCOPE_MODEL, DB_PATH, ZAI_MODEL } from "./config.js";
+import { DEFAULT_TEXT_AI_PROVIDER, normalizeTextAiProvider, normalizeTextAiProviderStates } from "./aiProviders.js";
 
 export function ensureDir(p) {
   fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -31,6 +32,12 @@ export function openDb() {
   `);
   const row = db.prepare("SELECT id FROM state WHERE id = 1").get();
   if (!row) {
+    const aiTextProvider = DEFAULT_TEXT_AI_PROVIDER;
+    const aiTextProviderStates = normalizeTextAiProviderStates(
+      {},
+      aiTextProvider,
+      { models: [ZAI_MODEL || "glm-4.6v"], defaultTextModel: ZAI_MODEL || "glm-4.6v" }
+    );
     db.prepare("INSERT INTO state (id, json, updated_at) VALUES (1, ?, 0)").run(
       JSON.stringify({
         pregnancyInfo: null,
@@ -38,6 +45,8 @@ export function openDb() {
         weights: [],
         bubbleSpeed: 0.35,
         themeMode: "dark",
+        aiTextProvider,
+        aiTextProviderStates,
         aiVendor: "zhipu",
         aiModelZhipu: "glm-4.6v",
         aiModelAliyun: "qwen3.5-plus",
@@ -141,7 +150,7 @@ export function normalizeThemeMode(input) {
 export function normalizeAiModel(input) {
   const v = typeof input === "string" ? input.trim() : "";
   if (!v) return "glm-4.6v";
-  if (v.length > 64) return v.slice(0, 64);
+  if (v.length > 120) return v.slice(0, 120);
   return v;
 }
 
@@ -201,6 +210,17 @@ export function readState(db) {
   const weights = normalizeWeightRecords(parsed?.weights);
   const bubbleSpeed = normalizeBubbleSpeed(parsed?.bubbleSpeed);
   const themeMode = normalizeThemeMode(parsed?.themeMode);
+  const aiTextProvider = normalizeTextAiProvider(parsed?.aiTextProvider ?? parsed?.aiVendor);
+  const legacyTextModel =
+    aiTextProvider === "aliyun"
+      ? normalizeAiModel(parsed?.aiModelAliyun ?? DASHSCOPE_MODEL)
+      : aiTextProvider === "zhipu"
+        ? normalizeAiModel(parsed?.aiModelZhipu ?? parsed?.aiModel ?? ZAI_MODEL)
+        : "";
+  const aiTextProviderStates = normalizeTextAiProviderStates(parsed?.aiTextProviderStates, aiTextProvider, {
+    models: legacyTextModel ? [legacyTextModel] : [],
+    defaultTextModel: legacyTextModel
+  });
   const aiVendor = normalizeAiVendor(parsed?.aiVendor);
   const aiModelZhipu = normalizeAiModel(parsed?.aiModelZhipu ?? parsed?.aiModel ?? ZAI_MODEL);
   const aiModelAliyun = normalizeAiModel(parsed?.aiModelAliyun ?? DASHSCOPE_MODEL);
@@ -238,6 +258,8 @@ export function readState(db) {
     weights,
     bubbleSpeed,
     themeMode,
+    aiTextProvider,
+    aiTextProviderStates,
     aiVendor,
     aiModelZhipu,
     aiModelAliyun,
@@ -261,6 +283,19 @@ export function writeState(db, payload) {
   const weights = normalizeWeightRecords(payload?.weights);
   const bubbleSpeed = normalizeBubbleSpeed(payload?.bubbleSpeed);
   const themeMode = normalizeThemeMode(payload?.themeMode);
+  const aiTextProvider = normalizeTextAiProvider(payload?.aiTextProvider ?? payload?.aiVendor);
+  const legacyTextModel =
+    aiTextProvider === "aliyun"
+      ? normalizeAiModel(payload?.aiModelAliyun ?? DASHSCOPE_MODEL)
+      : aiTextProvider === "zhipu"
+        ? normalizeAiModel(payload?.aiModelZhipu ?? payload?.aiModel ?? ZAI_MODEL)
+        : typeof payload?.aiTextModel === "string"
+          ? normalizeAiModel(payload.aiTextModel)
+          : "";
+  const aiTextProviderStates = normalizeTextAiProviderStates(payload?.aiTextProviderStates, aiTextProvider, {
+    models: legacyTextModel ? [legacyTextModel] : [],
+    defaultTextModel: legacyTextModel
+  });
   const aiVendor = normalizeAiVendor(payload?.aiVendor);
   const aiModelZhipu = normalizeAiModel(payload?.aiModelZhipu ?? payload?.aiModel ?? ZAI_MODEL);
   const aiModelAliyun = normalizeAiModel(payload?.aiModelAliyun ?? DASHSCOPE_MODEL);
@@ -299,6 +334,8 @@ export function writeState(db, payload) {
       weights,
       bubbleSpeed,
       themeMode,
+      aiTextProvider,
+      aiTextProviderStates,
       aiVendor,
       aiModelZhipu,
       aiModelAliyun,
@@ -321,6 +358,8 @@ export function writeState(db, payload) {
     weights,
     bubbleSpeed,
     themeMode,
+    aiTextProvider,
+    aiTextProviderStates,
     aiVendor,
     aiModelZhipu,
     aiModelAliyun,
@@ -337,4 +376,3 @@ export function writeState(db, payload) {
     updatedAt
   };
 }
-
