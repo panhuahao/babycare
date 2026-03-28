@@ -457,9 +457,9 @@ export function HomePage({
 }) {
   const top3 = records.filter((r) => r.effectiveCount > 0).slice(0, 3);
   const latestWeight = useMemo(() => getLatestWeightRecord(weights), [weights]);
-  const previousWeight = useMemo(() => (latestWeight ? getPreviousWeightRecord(weights, latestWeight.date) : null), [weights, latestWeight]);
   const todayKey = formatDateKey(new Date());
   const todayWeight = useMemo(() => weights.find((item) => item.date === todayKey) ?? null, [weights, todayKey]);
+  const weightTrendSeries = useMemo(() => [...normalizeWeightRecords(weights)].reverse().slice(-7), [weights]);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const arenaRef = useRef<HTMLDivElement | null>(null);
   const bubbleRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -471,6 +471,7 @@ export function HomePage({
   const [weightInput, setWeightInput] = useState(() =>
     todayWeight ? String(todayWeight.weightKg) : latestWeight ? String(latestWeight.weightKg) : ""
   );
+  const [activeWeightDate, setActiveWeightDate] = useState<string | null>(null);
   const refreshBusyRef = useRef(false);
   const pullStartYRef = useRef<number | null>(null);
   const pullEnabledRef = useRef(false);
@@ -693,10 +694,28 @@ export function HomePage({
     setWeightInput(todayWeight ? String(todayWeight.weightKg) : latestWeight ? String(latestWeight.weightKg) : "");
   }, [todayWeight?.date, todayWeight?.weightKg, latestWeight?.date, latestWeight?.weightKg]);
 
+  useEffect(() => {
+    setActiveWeightDate((prev) => (prev && weightTrendSeries.some((item) => item.date === prev) ? prev : weightTrendSeries[weightTrendSeries.length - 1]?.date ?? null));
+  }, [weightTrendSeries]);
+
   const weightValue = normalizeWeightKg(weightInput);
-  const weightDelta = latestWeight && previousWeight ? Math.round((latestWeight.weightKg - previousWeight.weightKg) * 10) / 10 : null;
-  const weightDeltaText =
-    weightDelta == null ? "暂无对比数据" : weightDelta === 0 ? "较上次持平" : `较上次${weightDelta > 0 ? "+" : ""}${weightDelta.toFixed(1)} kg`;
+  const activeWeight = useMemo(
+    () => weightTrendSeries.find((item) => item.date === activeWeightDate) ?? latestWeight,
+    [activeWeightDate, latestWeight, weightTrendSeries]
+  );
+  const activePreviousWeight = useMemo(
+    () => (activeWeight ? getPreviousWeightRecord(weights, activeWeight.date) : null),
+    [activeWeight, weights]
+  );
+  const activeWeightDelta =
+    activeWeight && activePreviousWeight ? Math.round((activeWeight.weightKg - activePreviousWeight.weightKg) * 10) / 10 : null;
+  const activeWeightDeltaText =
+    activeWeightDelta == null
+      ? "暂无对比数据"
+      : activeWeightDelta === 0
+        ? "较上次持平"
+        : `较上次${activeWeightDelta > 0 ? "+" : ""}${activeWeightDelta.toFixed(1)} kg`;
+  const weightHeroLabel = activeWeight && latestWeight && activeWeight.date !== latestWeight.date ? "选中体重" : "最近体重";
 
   function commitTodayWeight() {
     if (weightValue == null) {
@@ -717,46 +736,58 @@ export function HomePage({
 
           <div className="weightHeroRow">
             <div className="weightHeroMain">
-              <div className="recordSub">最近体重</div>
+              <div className="recordSub">{weightHeroLabel}</div>
               <div className="weightHeroInline">
                 <div className="weightHeroValue">
-                  {latestWeight ? latestWeight.weightKg.toFixed(1) : "--"}
+                  {activeWeight ? activeWeight.weightKg.toFixed(1) : "--"}
                   <span>kg</span>
                 </div>
-                <div className="weightHeroSide">
-                  <div className="pill weightGestationPill">
-                    <strong>{formatGestation(pregnancy)}</strong>
-                    <span className="muted">·</span>
-                    <span>{pregnancy.stage}</span>
+                <div className="weightHeroActions">
+                  <label className="weightQuickInline">
+                    <span className="weightQuickInlineLabel">{todayWeight ? "今日已记" : "今日输入"}</span>
+                    <input
+                      className="input weightInput weightInputCompact weightInputInline"
+                      inputMode="decimal"
+                      placeholder={latestWeight ? latestWeight.weightKg.toFixed(1) : "58.6"}
+                      value={weightInput}
+                      onChange={(e) => setWeightInput(e.target.value)}
+                      onBlur={commitTodayWeight}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        (e.currentTarget as HTMLInputElement).blur();
+                      }}
+                      aria-label="今天体重"
+                    />
+                  </label>
+                  <div className="weightHeroSide">
+                    <div className="pill weightGestationPill">
+                      <strong>{formatGestation(pregnancy)}</strong>
+                      <span className="muted">·</span>
+                      <span>{pregnancy.stage}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="weightHeroMeta">{latestWeight ? `${latestWeight.date} · ${weightDeltaText}` : "还没有体重记录，先记录今天的体重吧"}</div>
+              <div className="weightHeroMeta">
+                {activeWeight ? `${activeWeight.date} · ${activeWeightDeltaText}` : "还没有体重记录，先记录今天的体重吧"}
+              </div>
             </div>
           </div>
 
           <div className="weightBottomRow">
-            <WeightTrendChart records={weights} maxPoints={7} height={60} minVisualRangeKg={2.4} visualPaddingKg={0.45} />
-
-            <div className="weightQuickForm weightQuickFormCompact">
-              <input
-                className="input weightInput weightInputCompact"
-                inputMode="decimal"
-                placeholder={latestWeight ? latestWeight.weightKg.toFixed(1) : "58.6"}
-                value={weightInput}
-                onChange={(e) => setWeightInput(e.target.value)}
-                onBlur={commitTodayWeight}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
-                  e.preventDefault();
-                  (e.currentTarget as HTMLInputElement).blur();
-                }}
-                aria-label="今天体重"
+            <div className="weightTrendPanel">
+              <WeightTrendChart
+                records={weights}
+                maxPoints={7}
+                height={68}
+                minVisualRangeKg={0.9}
+                visualPaddingKg={0.12}
+                activeDate={activeWeight?.date ?? null}
+                onSelectDate={setActiveWeightDate}
               />
-              <div className="weightInputHint">今日输入</div>
             </div>
           </div>
-          <div className="hint">输入今天体重后，退出输入框会自动保存并同步；同一天再次输入会覆盖更新。</div>
         </div>
       </div>
 
@@ -886,14 +917,40 @@ function formatWeekRangeTitle(days: number[]) {
   return `${formatShortDateLabel(startKey)} - ${formatShortDateLabel(endKey)}`;
 }
 
+function buildSmoothTrendPath(points: Array<{ x: number; y: number }>) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y} L ${points[0].x} ${points[0].y}`;
+  if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[i - 1] ?? points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] ?? p2;
+
+    // Catmull-Rom -> cubic Bezier so the curve stays smooth and still passes through every point.
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    const c2y = p2.y - (p3.y - p1.y) / 6;
+    path += ` C ${c1x} ${c1y} ${c2x} ${c2y} ${p2.x} ${p2.y}`;
+  }
+  return path;
+}
+
 function WeightTrendChart({
   records,
+  activeDate,
+  onSelectDate,
   maxPoints = 7,
   height = 96,
   minVisualRangeKg = 1.8,
   visualPaddingKg = 0.35
 }: {
   records: WeightRecord[];
+  activeDate: string | null;
+  onSelectDate: (date: string) => void;
   maxPoints?: number;
   height?: number;
   minVisualRangeKg?: number;
@@ -901,11 +958,6 @@ function WeightTrendChart({
 }) {
   const series = useMemo(() => [...normalizeWeightRecords(records)].reverse().slice(-maxPoints), [records, maxPoints]);
   const chartId = useId().replace(/:/g, "");
-  const [activeDate, setActiveDate] = useState<string | null>(null);
-
-  useEffect(() => {
-    setActiveDate((prev) => (prev && series.some((item) => item.date === prev) ? prev : series[series.length - 1]?.date ?? null));
-  }, [series]);
 
   if (!series.length) {
     return (
@@ -916,8 +968,9 @@ function WeightTrendChart({
   }
 
   const width = 100;
-  const padX = 8;
-  const padY = 6;
+  const padX = 7;
+  const padTop = 7;
+  const padBottom = 8;
   const values = series.map((item) => item.weightKg);
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
@@ -927,109 +980,90 @@ function WeightTrendChart({
   const min = mid - visualRange / 2;
   const max = mid + visualRange / 2;
   const usableWidth = width - padX * 2;
-  const usableHeight = height - padY * 2;
-  const visualBandRatio = 0.58;
-  const visualBandOffset = 0.22;
-  const slotWidth = usableWidth / series.length;
-  const barWidth = Math.max(5.5, Math.min(9.5, slotWidth - 4));
-  const bars = series.map((item, idx) => {
+  const usableHeight = height - padTop - padBottom;
+  const visualBandRatio = 0.8;
+  const visualBandOffset = 0.06;
+  const stepX = series.length > 1 ? usableWidth / (series.length - 1) : 0;
+  const points = series.map((item, idx) => {
     const normalizedRatio = max === min ? 0.5 : (item.weightKg - min) / (max - min);
     const ratio = visualBandOffset + normalizedRatio * visualBandRatio;
-    const barHeight = Math.max(9, ratio * usableHeight);
-    const x = padX + slotWidth * idx + (slotWidth - barWidth) / 2;
-    const y = height - padY - barHeight;
-    return { ...item, x, y, barHeight };
+    const x = series.length > 1 ? padX + stepX * idx : width / 2;
+    const y = height - padBottom - ratio * usableHeight;
+    return { ...item, x, y };
   });
-  const activeBar = bars.find((item) => item.date === activeDate) ?? bars[bars.length - 1];
-  const activeIndex = Math.max(
-    0,
-    bars.findIndex((item) => item.date === activeBar.date)
-  );
-  const guides = [0.32, 0.64].map((ratio) => padY + usableHeight * ratio);
-
-  function activateBar(date: string) {
-    setActiveDate(date);
-  }
+  const activePoint = points.find((item) => item.date === activeDate) ?? points[points.length - 1];
+  const guides = [0.2, 0.48, 0.76].map((ratio) => padTop + usableHeight * ratio);
+  const linePath = buildSmoothTrendPath(points);
+  const areaPath =
+    points.length === 1
+      ? `M ${points[0].x} ${points[0].y} L ${points[0].x} ${height - padBottom} L ${points[0].x} ${height - padBottom} Z`
+      : `${linePath} L ${points[points.length - 1].x} ${height - padBottom} L ${points[0].x} ${height - padBottom} Z`;
 
   return (
     <div className="weightTrendChart">
-      <div className="weightTrendInfo" aria-live="polite">
+      <div className="weightTrendInfo">
         <div className="weightTrendInfoLabel">{`近${series.length}次 · 波动 ${spread.toFixed(1)} kg`}</div>
-        <div className="weightTrendInfoMain">
-          <span className="weightTrendInfoDate">{formatShortDateLabel(activeBar.date)}</span>
-          <strong className="weightTrendInfoValue">{activeBar.weightKg.toFixed(1)} kg</strong>
-        </div>
       </div>
 
-      <svg
-        className="weightTrendSvg"
-        style={{ height }}
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        aria-label="体重趋势图"
-      >
-        <defs>
-          <linearGradient id={`${chartId}-bar`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255, 188, 210, 0.94)" />
-            <stop offset="52%" stopColor="rgba(255, 146, 183, 0.84)" />
-            <stop offset="100%" stopColor="rgba(255, 110, 154, 0.62)" />
-          </linearGradient>
-          <linearGradient id={`${chartId}-bar-active`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(255, 241, 246, 0.98)" />
-            <stop offset="46%" stopColor="rgba(255, 171, 201, 0.98)" />
-            <stop offset="100%" stopColor="rgba(255, 120, 166, 0.96)" />
-          </linearGradient>
-        </defs>
+      <div className="weightTrendCanvas">
+        <svg
+          className="weightTrendSvg"
+          style={{ height }}
+          viewBox={`0 0 ${width} ${height}`}
+          preserveAspectRatio="none"
+          aria-label="体重趋势图"
+        >
+          <defs>
+            <linearGradient id={`${chartId}-area`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(255, 163, 191, 0.26)" />
+              <stop offset="100%" stopColor="rgba(255, 163, 191, 0.02)" />
+            </linearGradient>
+            <linearGradient id={`${chartId}-line`} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="rgba(255, 196, 216, 0.9)" />
+              <stop offset="100%" stopColor="rgba(255, 122, 168, 1)" />
+            </linearGradient>
+          </defs>
 
-        <rect
-          x={padX + slotWidth * activeIndex + 1}
-          y={padY - 1}
-          width={Math.max(0, slotWidth - 2)}
-          height={usableHeight + 2}
-          rx="6"
-          className="weightTrendColumnActive"
-        />
-        {guides.map((y) => (
-          <path key={y} d={`M ${padX} ${y} H ${width - padX}`} className="weightAxisGuide" />
-        ))}
-        <path d={`M ${padX} ${height - padY} H ${width - padX}`} className="weightAxis" />
-        {bars.map((item, idx) => (
-          <g key={item.date}>
-            <rect x={item.x} y={padY} width={barWidth} height={usableHeight} rx="4" className="weightTrendTrack" />
-            <rect
-              x={item.x}
-              y={item.y}
-              width={barWidth}
-              height={item.barHeight}
-              rx="4"
-              fill={`url(#${item.date === activeBar.date ? `${chartId}-bar-active` : `${chartId}-bar`})`}
-              className={`weightTrendBar ${idx === bars.length - 1 ? "weightTrendBarLatest" : ""} ${item.date === activeBar.date ? "weightTrendBarActive" : ""}`}
-            />
-                        <rect
-              x={padX + slotWidth * idx}
-              y={0}
-              width={slotWidth}
-              height={height}
-              rx="4"
-              fill="transparent"
-              className="weightTrendHit"
-              style={{ cursor: "pointer" }}
-              role="button"
-              tabIndex={0}
-              aria-label={`${item.date}，${item.weightKg.toFixed(1)} 公斤`}
-              onMouseEnter={() => activateBar(item.date)}
-              onFocus={() => activateBar(item.date)}
-              onClick={() => activateBar(item.date)}
-              onTouchStart={() => activateBar(item.date)}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.preventDefault();
-                activateBar(item.date);
-              }}
-            />
-          </g>
-        ))}
-      </svg>
+          {guides.map((y) => (
+            <path key={y} d={`M ${padX} ${y} H ${width - padX}`} className="weightTrendGuide" />
+          ))}
+          <path d={areaPath} className="weightLineArea" fill={`url(#${chartId}-area)`} />
+          <path d={linePath} className="weightTrendPath" stroke={`url(#${chartId}-line)`} />
+          <path d={`M ${activePoint.x} ${padTop - 2} V ${height - padBottom + 2}`} className="weightTrendActiveGuide" />
+          {points.map((item) => {
+            const isActive = item.date === activePoint.date;
+            return (
+              <g key={item.date}>
+                {isActive ? <circle cx={item.x} cy={item.y} r={3.9} className="weightTrendPulse" /> : null}
+                <circle cx={item.x} cy={item.y} r={isActive ? 2.2 : 1.5} className={`weightTrendDot ${isActive ? "weightTrendDotActive" : ""}`} />
+                <circle
+                  cx={item.x}
+                  cy={item.y}
+                  r={8}
+                  fill="transparent"
+                  className="weightTrendHit"
+                  tabIndex={0}
+                  aria-label={`${item.date}，${item.weightKg.toFixed(1)} 公斤`}
+                  onMouseEnter={() => onSelectDate(item.date)}
+                  onFocus={() => onSelectDate(item.date)}
+                  onClick={() => onSelectDate(item.date)}
+                  onTouchStart={() => onSelectDate(item.date)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.preventDefault();
+                    onSelectDate(item.date);
+                  }}
+                />
+              </g>
+            );
+          })}
+        </svg>
+
+        <div className="weightTrendRange" aria-hidden="true">
+          <span>{formatShortDateLabel(points[0].date)}</span>
+          <span>{formatShortDateLabel(points[points.length - 1].date)}</span>
+        </div>
+      </div>
     </div>
   );
 }

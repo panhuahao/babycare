@@ -328,6 +328,13 @@ button {
   gap: 10px;
 }
 
+.weightHeroActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .weightHeroValue {
   display: flex;
   align-items: baseline;
@@ -364,7 +371,6 @@ button {
   margin-top: 0;
   display: grid;
   gap: 8px;
-  flex: 1;
   min-width: 0;
 }
 
@@ -372,6 +378,16 @@ button {
   width: 100%;
   display: block;
   overflow: visible;
+}
+
+.weightTrendCanvas {
+  padding: 8px 10px 6px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(var(--pink-rgb), 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .weightTrendInfo {
@@ -410,6 +426,48 @@ button {
   font-size: 13px;
   color: var(--text);
   letter-spacing: 0.01em;
+}
+
+.weightTrendPulse {
+  fill: rgba(var(--pink-rgb), 0.08);
+}
+
+.weightTrendRange {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.weightTrendGuide {
+  stroke: rgba(255, 255, 255, 0.055);
+  stroke-width: 0.72;
+  stroke-dasharray: 2.4 4.2;
+}
+
+.weightTrendPath {
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 5px 12px rgba(var(--pink-rgb), 0.1));
+}
+
+.weightTrendActiveGuide {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 0.85;
+}
+
+.weightTrendDot {
+  fill: rgba(255, 146, 183, 0.96);
+}
+
+.weightTrendDotActive {
+  fill: rgba(255, 122, 168, 1);
 }
 
 .weightAxis {
@@ -484,20 +542,72 @@ button {
 }
 
 .weightBottomRow {
-  margin-top: 8px;
+  margin-top: 10px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px;
-  align-items: end;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.weightTrendPanel {
+  min-width: 0;
 }
 
 .weightQuickFormCompact {
   margin-top: 0;
-  width: 88px;
+  width: 80px;
   display: grid;
   gap: 4px;
   align-content: end;
-  justify-self: end;
+  flex-shrink: 0;
+}
+
+.weightQuickInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.weightQuickInlineLabel {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.weightQuickFormInline {
+  margin-top: 0;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.weightQuickSummary {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+
+.weightQuickSummary strong {
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.weightQuickSummary span {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.weightQuickField {
+  width: 92px;
+  display: grid;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .weightInput {
@@ -512,6 +622,14 @@ button {
   font-size: 18px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.weightInputInline {
+  width: 68px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  font-size: 16px;
 }
 
 .weightInputHint {
@@ -953,15 +1071,23 @@ button {
 
   .weightHeroInline {
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .weightHeroActions {
+    gap: 6px;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .weightGestationPill {
-    white-space: normal;
+    white-space: nowrap;
     justify-content: center;
     text-align: center;
-    padding: 4px 8px;
-    font-size: 11px;
+    min-height: 28px;
+    padding: 3px 8px;
+    font-size: 10px;
   }
 
   .weightManagerGrid {
@@ -969,7 +1095,7 @@ button {
   }
 
   .weightBottomRow {
-    grid-template-columns: minmax(0, 1fr) 84px;
+    gap: 8px;
   }
 
   .weightListActions {
@@ -992,6 +1118,17 @@ button {
     width: 100%;
     justify-content: space-between;
     padding: 6px 10px;
+  }
+
+  .weightQuickInlineLabel {
+    display: block;
+    min-width: 0;
+  }
+
+  .weightInputInline {
+    width: 100%;
+    min-height: 34px;
+    font-size: 15px;
   }
 
   .weightStatsHeader,
@@ -2836,6 +2973,22 @@ button {
 :root[data-theme="light"] .weightLineGuide,
 :root[data-theme="light"] .weightLineActiveGuide {
   stroke: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .weightTrendGuide,
+:root[data-theme="light"] .weightTrendActiveGuide {
+  stroke: rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="light"] .weightTrendCanvas,
+:root[data-theme="light"] .weightQuickFormInline {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .weightTrendCanvas {
+  background:
+    radial-gradient(circle at top right, rgba(244, 114, 182, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%);
 }
 
 :root[data-theme="light"] .weightLineTick,
